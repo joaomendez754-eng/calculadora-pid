@@ -1,3 +1,4 @@
+import io
 import numpy as np
 import streamlit as st
 import plotly.graph_objects as go
@@ -19,7 +20,6 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-
     @import url(
         'https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800&display=swap'
     );
@@ -42,24 +42,23 @@ st.markdown(
         inset: 0;
         pointer-events: none;
         z-index: 999;
-        opacity: 0.12;
+        opacity: 0.10;
         background:
             repeating-linear-gradient(
                 0deg,
-                rgba(255,255,255,0.12) 0px,
-                rgba(255,255,255,0.12) 1px,
+                rgba(255,255,255,0.15) 0px,
+                rgba(255,255,255,0.15) 1px,
                 transparent 1px,
                 transparent 4px
             );
     }
 
     [data-testid="stSidebar"] {
-        background:
-            linear-gradient(
-                180deg,
-                #160d2e 0%,
-                #08091b 100%
-            );
+        background: linear-gradient(
+            180deg,
+            #160d2e 0%,
+            #08091b 100%
+        );
         border-right: 2px solid #ff2bd6;
     }
 
@@ -68,12 +67,11 @@ st.markdown(
     }
 
     h1 {
-        color: #ffffff !important;
+        color: white !important;
         text-shadow:
             0 0 5px #ff2bd6,
             0 0 14px #ff2bd6,
             0 0 28px #742cff;
-        letter-spacing: 2px;
     }
 
     h2, h3 {
@@ -86,7 +84,7 @@ st.markdown(
     }
 
     .retro-header {
-        padding: 30px;
+        padding: 28px;
         margin-bottom: 25px;
         border: 2px solid #ff2bd6;
         border-radius: 20px;
@@ -104,7 +102,7 @@ st.markdown(
 
     .retro-header h1 {
         margin: 0 0 8px 0;
-        font-size: 2.6rem;
+        font-size: 2.5rem;
     }
 
     .retro-header p {
@@ -123,13 +121,7 @@ st.markdown(
         border: 1px solid #5ffcff;
         border-radius: 15px;
         padding: 18px;
-        box-shadow:
-            0 0 9px rgba(95,252,255,0.7),
-            inset 0 0 15px rgba(255,43,214,0.12);
-    }
-
-    div[data-testid="stMetricLabel"] {
-        color: #d8b7ff !important;
+        box-shadow: 0 0 10px rgba(95,252,255,0.55);
     }
 
     div[data-testid="stMetricValue"] {
@@ -141,25 +133,19 @@ st.markdown(
     .stTextInput input,
     .stNumberInput input {
         background-color: #0e1027 !important;
-        color: #ffffff !important;
+        color: white !important;
         border: 1px solid #a633ff !important;
         border-radius: 10px !important;
-        box-shadow: inset 0 0 8px rgba(166,51,255,0.3);
     }
 
-    div[data-baseweb="select"] > div {
-        background-color: #0e1027;
-        border: 1px solid #a633ff;
-        border-radius: 10px;
+    div[data-testid="stExpander"] {
+        background: rgba(14, 16, 39, 0.85);
+        border: 1px solid #ff2bd6;
+        border-radius: 15px;
     }
 
     .stButton > button {
-        background:
-            linear-gradient(
-                90deg,
-                #ff2bd6,
-                #742cff
-            );
+        background: linear-gradient(90deg, #ff2bd6, #742cff);
         color: white;
         border: 1px solid #5ffcff;
         border-radius: 10px;
@@ -170,22 +156,8 @@ st.markdown(
 
     .stButton > button:hover {
         transform: translateY(-2px);
-        box-shadow:
-            0 0 10px #5ffcff,
-            0 0 22px #ff2bd6;
+        box-shadow: 0 0 10px #5ffcff, 0 0 22px #ff2bd6;
     }
-
-    div[data-testid="stExpander"] {
-        background: rgba(14, 16, 39, 0.85);
-        border: 1px solid #ff2bd6;
-        border-radius: 15px;
-        box-shadow: 0 0 12px rgba(255,43,214,0.35);
-    }
-
-    hr {
-        border-color: #a633ff;
-    }
-
     </style>
     """,
     unsafe_allow_html=True
@@ -209,14 +181,10 @@ def leer_coeficientes(texto):
     )
 
     if valores.size == 0:
-        raise ValueError(
-            "Ingresa coeficientes numéricos válidos."
-        )
+        raise ValueError("Ingresa coeficientes válidos.")
 
     if not np.all(np.isfinite(valores)):
-        raise ValueError(
-            "Los coeficientes deben ser finitos."
-        )
+        raise ValueError("Los coeficientes deben ser finitos.")
 
     return np.trim_zeros(valores, "f")
 
@@ -226,7 +194,6 @@ def polinomio(coeficientes):
     grado = len(coeficientes) - 1
 
     for indice, valor in enumerate(coeficientes):
-
         if valor == 0:
             continue
 
@@ -235,14 +202,9 @@ def polinomio(coeficientes):
 
         if potencia == 0:
             termino = f"{magnitud:g}"
-
         else:
             factor = "" if magnitud == 1 else f"{magnitud:g}"
-            variable = (
-                "s"
-                if potencia == 1
-                else f"s^{{{potencia}}}"
-            )
+            variable = "s" if potencia == 1 else f"s^{{{potencia}}}"
             termino = factor + variable
 
         if not partes:
@@ -257,7 +219,153 @@ def polinomio(coeficientes):
     return "".join(partes) or "0"
 
 
-def estilo_grafica(figura, titulo):
+def simular(
+    num,
+    den,
+    referencia,
+    duracion,
+    ts,
+    tf,
+    kp,
+    ki,
+    kd,
+    beta
+):
+    cantidad = int(np.floor(duracion / ts)) + 1
+
+    if cantidad > 50000:
+        raise ValueError(
+            "Reduce la duración o aumenta Ts."
+        )
+
+    a, b, c, d = tf2ss(num, den)
+
+    ad, bd, cd, dd, _ = cont2discrete(
+        (a, b, c, d),
+        ts,
+        method="zoh"
+    )
+
+    tiempo = np.arange(cantidad) * ts
+    referencia_array = np.full(cantidad, referencia)
+
+    salida_array = np.zeros(cantidad)
+    control_array = np.zeros(cantidad)
+    error_array = np.zeros(cantidad)
+
+    proporcional_array = np.zeros(cantidad)
+    integral_array = np.zeros(cantidad)
+    derivativa_array = np.zeros(cantidad)
+
+    estado = np.zeros(ad.shape[0])
+    integral_acumulada = 0.0
+    derivada_filtrada = 0.0
+    salida_anterior = 0.0
+
+    alpha = tf / (tf + ts)
+    interrumpida = False
+
+    for k in range(cantidad):
+
+        salida = float((cd @ estado).item())
+
+        error = referencia_array[k] - salida
+        error_proporcional = beta * referencia_array[k] - salida
+
+        derivada_filtrada = (
+            alpha * derivada_filtrada
+            + (salida - salida_anterior) / (tf + ts)
+        )
+
+        p = kp * error_proporcional
+        i = ki * integral_acumulada
+        deriv = -kd * derivada_filtrada
+
+        control = p + i + deriv
+
+        if (
+            not np.all(np.isfinite([salida, control]))
+            or max(abs(salida), abs(control)) > 1e8
+        ):
+            interrumpida = True
+            break
+
+        salida_array[k] = salida
+        control_array[k] = control
+        error_array[k] = error
+
+        proporcional_array[k] = p
+        integral_array[k] = i
+        derivativa_array[k] = deriv
+
+        estado = ad @ estado + bd[:, 0] * control
+
+        integral_acumulada += error * ts
+        salida_anterior = salida
+
+    if interrumpida:
+        ultimo = k
+
+        tiempo = tiempo[:ultimo]
+        referencia_array = referencia_array[:ultimo]
+        salida_array = salida_array[:ultimo]
+        control_array = control_array[:ultimo]
+        error_array = error_array[:ultimo]
+
+        proporcional_array = proporcional_array[:ultimo]
+        integral_array = integral_array[:ultimo]
+        derivativa_array = derivativa_array[:ultimo]
+
+    if len(tiempo) == 0:
+        raise ValueError("No se pudo calcular la respuesta.")
+
+    error_final = referencia_array[-1] - salida_array[-1]
+
+    if referencia != 0:
+        sobreimpulso = max(
+            0,
+            (np.max(salida_array) - referencia)
+            / abs(referencia)
+            * 100
+        )
+    else:
+        sobreimpulso = 0.0
+
+    banda = max(0.02 * abs(referencia), 0.01)
+    fuera = np.where(
+        np.abs(referencia_array - salida_array) > banda
+    )[0]
+
+    if len(fuera) == 0:
+        tiempo_establecimiento = 0.0
+    elif fuera[-1] < len(tiempo) - 1:
+        tiempo_establecimiento = tiempo[fuera[-1] + 1]
+    else:
+        tiempo_establecimiento = duracion
+
+    estable = (
+        np.all(np.isfinite(salida_array))
+        and np.max(np.abs(salida_array)) < 1e6
+        and not interrumpida
+    )
+
+    return {
+        "t": tiempo,
+        "r": referencia_array,
+        "y": salida_array,
+        "u": control_array,
+        "e": error_array,
+        "p": proporcional_array,
+        "i": integral_array,
+        "d": derivativa_array,
+        "error_final": error_final,
+        "sobreimpulso": sobreimpulso,
+        "ts_establecimiento": tiempo_establecimiento,
+        "estable": estable
+    }
+
+
+def estilo(figura, titulo):
     figura.update_layout(
         title=dict(
             text=titulo,
@@ -267,24 +375,16 @@ def estilo_grafica(figura, titulo):
                 color="#5ffcff"
             )
         ),
-        height=470,
+        height=460,
         paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(7,8,25,0.90)",
-        font=dict(
-            color="#f1d9ff",
-            family="Arial"
-        ),
+        plot_bgcolor="rgba(7,8,25,0.92)",
+        font=dict(color="#f1d9ff"),
         hovermode="x unified",
         legend=dict(
             orientation="h",
             y=1.12
         ),
-        margin=dict(
-            l=45,
-            r=35,
-            t=80,
-            b=50
-        )
+        margin=dict(l=45, r=35, t=80, b=50)
     )
 
     figura.update_xaxes(
@@ -326,15 +426,8 @@ with st.sidebar:
 
     st.header("🧩 PLANTA G(s)")
 
-    num_texto = st.text_input(
-        "Numerador",
-        "1, 1"
-    )
-
-    den_texto = st.text_input(
-        "Denominador",
-        "1, 1, 2"
-    )
+    num_texto = st.text_input("Numerador", "1, 1")
+    den_texto = st.text_input("Denominador", "1, 1, 2")
 
     st.caption(
         "Coeficientes en potencias descendentes de s."
@@ -378,7 +471,7 @@ with st.sidebar:
 
 
 # =====================================================
-# CONTROLADOR
+# CONFIGURACIÓN
 # =====================================================
 
 st.subheader("🎛️ CONFIGURACIÓN DEL CONTROLADOR")
@@ -392,43 +485,31 @@ tipo_pid = st.radio(
     horizontal=True
 )
 
-col_beta, col_info = st.columns(2)
+col1, col2 = st.columns(2)
 
-with col_beta:
-
+with col1:
     beta = st.number_input(
         "Ponderación de referencia β",
         min_value=0.0,
         max_value=1.0,
         value=1.0,
         step=0.05,
-        format="%.2f",
-        help=(
-            "β=1 equivale al PID clásico. "
-            "Valores menores reducen la respuesta "
-            "proporcional ante cambios de referencia."
-        )
+        format="%.2f"
     )
 
-
-with col_info:
-
+with col2:
     if tipo_pid == "PID clásico (1 grado de libertad)":
         beta = 1.0
-        st.success("PID CLÁSICO ACTIVO | β = 1")
-
+        st.success("PID clásico activo | β = 1")
     else:
-        st.info("PID 2DOF ACTIVO | β CONFIGURABLE")
+        st.info("PID 2DOF activo | β configurable")
 
 
 st.subheader("📈 GANANCIAS")
 
 modo = st.radio(
     "Forma de ajuste",
-    [
-        "Valores exactos",
-        "Deslizadores"
-    ],
+    ["Valores exactos", "Deslizadores"],
     horizontal=True
 )
 
@@ -440,11 +521,8 @@ for columna, nombre, inicial in zip(
     ["Kp", "Ki", "Kd"],
     [2.0, 1.0, 0.1]
 ):
-
     with columna:
-
         if modo == "Valores exactos":
-
             valor = st.number_input(
                 nombre,
                 min_value=0.0,
@@ -453,9 +531,7 @@ for columna, nombre, inicial in zip(
                 format="%.2f",
                 key=f"numero_{nombre}"
             )
-
         else:
-
             valor = st.slider(
                 nombre,
                 min_value=0.0,
@@ -467,12 +543,47 @@ for columna, nombre, inicial in zip(
 
         ganancias.append(valor)
 
-
 kp, ki, kd = ganancias
 
 
 # =====================================================
-# SIMULACIÓN
+# BOTONES DE SIMULACIÓN
+# =====================================================
+
+col_a, col_b = st.columns(2)
+
+with col_a:
+    iniciar = st.button(
+        "▶ INICIAR SIMULACIÓN",
+        use_container_width=True
+    )
+
+with col_b:
+    limpiar = st.button(
+        "⏹ LIMPIAR",
+        use_container_width=True
+    )
+
+if "ejecutar" not in st.session_state:
+    st.session_state.ejecutar = False
+
+if iniciar:
+    st.session_state.ejecutar = True
+
+if limpiar:
+    st.session_state.ejecutar = False
+    st.rerun()
+
+if not st.session_state.ejecutar:
+    st.info(
+        "Configura la planta y las ganancias. "
+        "Luego pulsa INICIAR SIMULACIÓN."
+    )
+    st.stop()
+
+
+# =====================================================
+# CÁLCULOS
 # =====================================================
 
 try:
@@ -483,11 +594,6 @@ try:
     if den.size < 2:
         raise ValueError(
             "El denominador debe tener grado de al menos 1."
-        )
-
-    if num.size == 0:
-        raise ValueError(
-            "El numerador no puede ser completamente cero."
         )
 
     if num.size >= den.size:
@@ -503,170 +609,65 @@ try:
         + "}"
     )
 
-    cantidad = int(
-        np.floor(duracion / ts)
-    ) + 1
-
-    if cantidad > 50000:
-        raise ValueError(
-            "Reduce la duración o aumenta Ts."
-        )
-
-    # Planta en espacio de estados
-    a, b, c, d = tf2ss(num, den)
-
-    # Discretización ZOH
-    ad, bd, cd, dd, _ = cont2discrete(
-        (a, b, c, d),
+    resultado = simular(
+        num,
+        den,
+        referencia,
+        duracion,
         ts,
-        method="zoh"
+        tf,
+        kp,
+        ki,
+        kd,
+        beta
     )
 
-    tiempo = np.arange(cantidad) * ts
-
-    referencia_array = np.full(
-        cantidad,
-        referencia
+    # Simulación PID clásico
+    clasico = simular(
+        num,
+        den,
+        referencia,
+        duracion,
+        ts,
+        tf,
+        kp,
+        ki,
+        kd,
+        1.0
     )
 
-    salida_array = np.zeros(cantidad)
-    control_array = np.zeros(cantidad)
-    error_array = np.zeros(cantidad)
-
-    proporcional_array = np.zeros(cantidad)
-    integral_array = np.zeros(cantidad)
-    derivativa_array = np.zeros(cantidad)
-
-    estado_planta = np.zeros(
-        ad.shape[0]
-    )
-
-    acumulado_integral = 0.0
-    derivada_filtrada = 0.0
-    salida_anterior = 0.0
-
-    alpha = tf / (tf + ts)
-    interrumpida = False
-
-    for k in range(cantidad):
-
-        salida = float(
-            (cd @ estado_planta).item()
-        )
-
-        error_integral = (
-            referencia_array[k] - salida
-        )
-
-        if tipo_pid == "PID de dos grados de libertad":
-
-            error_proporcional = (
-                beta * referencia_array[k] - salida
-            )
-
-        else:
-
-            error_proporcional = error_integral
-
-        derivada_filtrada = (
-            alpha * derivada_filtrada
-            + (salida - salida_anterior)
-            / (tf + ts)
-        )
-
-        componente_p = (
-            kp * error_proporcional
-        )
-
-        componente_i = (
-            ki * acumulado_integral
-        )
-
-        componente_d = (
-            -kd * derivada_filtrada
-        )
-
-        control = (
-            componente_p
-            + componente_i
-            + componente_d
-        )
-
-        if (
-            not np.all(
-                np.isfinite(
-                    [salida, control]
-                )
-            )
-            or max(
-                abs(salida),
-                abs(control)
-            ) > 1e8
-        ):
-
-            interrumpida = True
-
-            tiempo = tiempo[:k]
-            referencia_array = referencia_array[:k]
-            salida_array = salida_array[:k]
-            control_array = control_array[:k]
-            error_array = error_array[:k]
-
-            proporcional_array = proporcional_array[:k]
-            integral_array = integral_array[:k]
-            derivativa_array = derivativa_array[:k]
-
-            break
-
-        salida_array[k] = salida
-        control_array[k] = control
-        error_array[k] = error_integral
-
-        proporcional_array[k] = componente_p
-        integral_array[k] = componente_i
-        derivativa_array[k] = componente_d
-
-        estado_planta = (
-            ad @ estado_planta
-            + bd[:, 0] * control
-        )
-
-        acumulado_integral += (
-            error_integral * ts
-        )
-
-        salida_anterior = salida
-
-    if interrumpida:
-
-        st.warning(
-            "La simulación se detuvo por valores excesivos. "
-            "Revisa las ganancias, la planta o Ts."
-        )
-
-    if len(tiempo) == 0:
-        raise ValueError(
-            "No se pudo calcular una respuesta válida."
-        )
+    tiempo = resultado["t"]
+    r = resultado["r"]
+    y = resultado["y"]
+    u = resultado["u"]
+    e = resultado["e"]
+    p = resultado["p"]
+    i = resultado["i"]
+    d = resultado["d"]
 
     # =================================================
-    # GRÁFICA 1: PROCESO Y CONTROL
+    # ESTADO DEL SISTEMA
     # =================================================
 
-    grafica_proceso = make_subplots(
+    if resultado["estable"]:
+        st.success("● SISTEMA ESTABLE")
+    else:
+        st.error("● SISTEMA INESTABLE O INTERRUMPIDO")
+
+    # =================================================
+    # GRÁFICA DE PROCESO Y CONTROL
+    # =================================================
+
+    figura_proceso = make_subplots(
         specs=[[{"secondary_y": True}]]
     )
 
-    grafica_proceso.add_trace(
+    figura_proceso.add_trace(
         go.Scatter(
             x=tiempo,
-            y=referencia_array,
+            y=r,
             name="Referencia r(t)",
-            mode="lines",
-            line=dict(
-                color="#ffb000",
-                width=3
-            ),
+            line=dict(color="#ffb000", width=3),
             hovertemplate=(
                 "<b>Referencia r(t)</b><br>"
                 "Tiempo: %{x:.3f} s<br>"
@@ -678,16 +679,12 @@ try:
         secondary_y=False
     )
 
-    grafica_proceso.add_trace(
+    figura_proceso.add_trace(
         go.Scatter(
             x=tiempo,
-            y=salida_array,
+            y=y,
             name="Salida y(t)",
-            mode="lines",
-            line=dict(
-                color="#5ffcff",
-                width=3
-            ),
+            line=dict(color="#5ffcff", width=3),
             hovertemplate=(
                 "<b>Salida y(t)</b><br>"
                 "Tiempo: %{x:.3f} s<br>"
@@ -699,16 +696,12 @@ try:
         secondary_y=False
     )
 
-    grafica_proceso.add_trace(
+    figura_proceso.add_trace(
         go.Scatter(
             x=tiempo,
-            y=control_array,
+            y=u,
             name="Control u(t)",
-            mode="lines",
-            line=dict(
-                color="#ff2bd6",
-                width=3
-            ),
+            line=dict(color="#ff2bd6", width=3),
             hovertemplate=(
                 "<b>Control u(t)</b><br>"
                 "Tiempo: %{x:.3f} s<br>"
@@ -720,42 +713,93 @@ try:
         secondary_y=True
     )
 
-    grafica_proceso = estilo_grafica(
-        grafica_proceso,
+    figura_proceso = estilo(
+        figura_proceso,
         "SEÑALES DE PROCESO Y CONTROL"
     )
 
-    grafica_proceso.update_yaxes(
+    figura_proceso.update_yaxes(
         title_text="Referencia y salida",
         secondary_y=False
     )
 
-    grafica_proceso.update_yaxes(
-        title_text="Señal de control u(t)",
+    figura_proceso.update_yaxes(
+        title_text="Control u(t)",
         secondary_y=True
     )
 
     st.plotly_chart(
-        grafica_proceso,
+        figura_proceso,
         use_container_width=True
     )
 
     # =================================================
-    # GRÁFICA 2: ERROR, INTEGRAL Y DERIVATIVA
+    # GRÁFICA DE COMPARACIÓN
     # =================================================
 
-    grafica_acciones = go.Figure()
+    st.subheader("🔁 COMPARACIÓN DE CONTROLADORES")
 
-    grafica_acciones.add_trace(
+    comparacion = go.Figure()
+
+    comparacion.add_trace(
         go.Scatter(
             x=tiempo,
-            y=error_array,
-            name="Error e(t)",
-            mode="lines",
+            y=r,
+            name="Referencia",
+            line=dict(
+                color="#ffb000",
+                width=2,
+                dash="dash"
+            )
+        )
+    )
+
+    comparacion.add_trace(
+        go.Scatter(
+            x=tiempo,
+            y=clasico["y"],
+            name="PID clásico",
             line=dict(
                 color="#ff625f",
                 width=3
-            ),
+            )
+        )
+    )
+
+    comparacion.add_trace(
+        go.Scatter(
+            x=tiempo,
+            y=y,
+            name="PID 2DOF",
+            line=dict(
+                color="#28d7a2",
+                width=3
+            )
+        )
+    )
+
+    comparacion = estilo(
+        comparacion,
+        "COMPARACIÓN PID CLÁSICO VS PID 2DOF"
+    )
+
+    st.plotly_chart(
+        comparacion,
+        use_container_width=True
+    )
+
+    # =================================================
+    # ERROR, INTEGRAL Y DERIVATIVA
+    # =================================================
+
+    figura_acciones = go.Figure()
+
+    figura_acciones.add_trace(
+        go.Scatter(
+            x=tiempo,
+            y=e,
+            name="Error e(t)",
+            line=dict(color="#ff625f", width=3),
             hovertemplate=(
                 "<b>Error e(t)</b><br>"
                 "Tiempo: %{x:.3f} s<br>"
@@ -766,18 +810,14 @@ try:
         )
     )
 
-    grafica_acciones.add_trace(
+    figura_acciones.add_trace(
         go.Scatter(
             x=tiempo,
-            y=integral_array,
+            y=i,
             name="Acción integral I(t)",
-            mode="lines",
-            line=dict(
-                color="#28d7a2",
-                width=3
-            ),
+            line=dict(color="#28d7a2", width=3),
             hovertemplate=(
-                "<b>Acción integral I(t)</b><br>"
+                "<b>Integral I(t)</b><br>"
                 "Tiempo: %{x:.3f} s<br>"
                 "Posición: %{y:.4f}<br>"
                 "Ecuación: I(t) = Ki · ∫e(t)dt"
@@ -786,18 +826,14 @@ try:
         )
     )
 
-    grafica_acciones.add_trace(
+    figura_acciones.add_trace(
         go.Scatter(
             x=tiempo,
-            y=derivativa_array,
+            y=d,
             name="Acción derivativa D(t)",
-            mode="lines",
-            line=dict(
-                color="#e879c9",
-                width=3
-            ),
+            line=dict(color="#e879c9", width=3),
             hovertemplate=(
-                "<b>Acción derivativa D(t)</b><br>"
+                "<b>Derivativa D(t)</b><br>"
                 "Tiempo: %{x:.3f} s<br>"
                 "Posición: %{y:.4f}<br>"
                 "Ecuación: D(t) = −Kd · dy/dt"
@@ -806,27 +842,22 @@ try:
         )
     )
 
-    grafica_acciones = estilo_grafica(
-        grafica_acciones,
+    figura_acciones = estilo(
+        figura_acciones,
         "ERROR Y ACCIONES DEL CONTROLADOR"
     )
 
-    grafica_acciones.update_layout(
-        xaxis_title="Tiempo (s)",
-        yaxis_title="Amplitud"
-    )
-
     st.plotly_chart(
-        grafica_acciones,
+        figura_acciones,
         use_container_width=True
     )
 
     # =================================================
-    # COMPONENTES DEL CONTROLADOR
+    # COMPONENTES P, I Y D
     # =================================================
 
     with st.expander(
-        "📺 VER COMPONENTES DEL CONTROLADOR"
+        "📺 VER COMPONENTES PROPORCIONAL, INTEGRAL Y DERIVATIVO"
     ):
 
         componentes = go.Figure()
@@ -834,64 +865,31 @@ try:
         componentes.add_trace(
             go.Scatter(
                 x=tiempo,
-                y=proporcional_array,
+                y=p,
                 name="Proporcional P(t)",
-                mode="lines",
-                line=dict(
-                    color="#5ffcff",
-                    width=3
-                ),
-                hovertemplate=(
-                    "<b>Proporcional P(t)</b><br>"
-                    "Tiempo: %{x:.3f} s<br>"
-                    "Posición: %{y:.4f}<br>"
-                    "Ecuación: P(t) = Kp · eP(t)"
-                    "<extra></extra>"
-                )
+                line=dict(color="#5ffcff", width=3)
             )
         )
 
         componentes.add_trace(
             go.Scatter(
                 x=tiempo,
-                y=integral_array,
+                y=i,
                 name="Integral I(t)",
-                mode="lines",
-                line=dict(
-                    color="#28d7a2",
-                    width=3
-                ),
-                hovertemplate=(
-                    "<b>Integral I(t)</b><br>"
-                    "Tiempo: %{x:.3f} s<br>"
-                    "Posición: %{y:.4f}<br>"
-                    "Ecuación: I(t) = Ki · ∫e(t)dt"
-                    "<extra></extra>"
-                )
+                line=dict(color="#28d7a2", width=3)
             )
         )
 
         componentes.add_trace(
             go.Scatter(
                 x=tiempo,
-                y=derivativa_array,
+                y=d,
                 name="Derivativa D(t)",
-                mode="lines",
-                line=dict(
-                    color="#e879c9",
-                    width=3
-                ),
-                hovertemplate=(
-                    "<b>Derivativa D(t)</b><br>"
-                    "Tiempo: %{x:.3f} s<br>"
-                    "Posición: %{y:.4f}<br>"
-                    "Ecuación: D(t) = −Kd · dy/dt"
-                    "<extra></extra>"
-                )
+                line=dict(color="#e879c9", width=3)
             )
         )
 
-        componentes = estilo_grafica(
+        componentes = estilo(
             componentes,
             "COMPONENTES DEL CONTROLADOR"
         )
@@ -907,26 +905,55 @@ try:
 
     st.subheader("📊 INDICADORES DEL SISTEMA")
 
-    metricas = st.columns(3)
+    m1, m2, m3, m4 = st.columns(4)
 
-    metricas[0].metric(
-        "Última salida",
-        f"{salida_array[-1]:.4f}"
+    m1.metric(
+        "Salida final",
+        f"{y[-1]:.4f}"
     )
 
-    metricas[1].metric(
-        "Último error",
-        f"{error_array[-1]:.4f}"
+    m2.metric(
+        "Error permanente",
+        f"{resultado['error_final']:.4f}"
     )
 
-    metricas[2].metric(
-        "Máximo |u(t)|",
-        f"{np.max(np.abs(control_array)):.4f}"
+    m3.metric(
+        "Sobreimpulso",
+        f"{resultado['sobreimpulso']:.2f}%"
     )
 
-    st.caption(
-        "Mueve el cursor sobre cualquier gráfica para observar "
-        "el tiempo, la posición y la ecuación de cada señal."
+    m4.metric(
+        "Tiempo de establecimiento",
+        f"{resultado['ts_establecimiento']:.2f} s"
+    )
+
+    # =================================================
+    # DESCARGA CSV
+    # =================================================
+
+    datos = np.column_stack(
+        [tiempo, r, y, u, e, p, i, d]
+    )
+
+    archivo = io.StringIO()
+
+    np.savetxt(
+        archivo,
+        datos,
+        delimiter=",",
+        header=(
+            "tiempo,referencia,salida,control,"
+            "error,proporcional,integral,derivativa"
+        ),
+        comments=""
+    )
+
+    st.download_button(
+        label="⬇️ DESCARGAR RESULTADOS CSV",
+        data=archivo.getvalue(),
+        file_name="resultados_pid.csv",
+        mime="text/csv",
+        use_container_width=True
     )
 
 
