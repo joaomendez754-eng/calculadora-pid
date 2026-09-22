@@ -1,4 +1,5 @@
 import io
+import csv
 import numpy as np
 import streamlit as st
 import plotly.graph_objects as go
@@ -194,6 +195,7 @@ def polinomio(coeficientes):
     grado = len(coeficientes) - 1
 
     for indice, valor in enumerate(coeficientes):
+
         if valor == 0:
             continue
 
@@ -204,7 +206,11 @@ def polinomio(coeficientes):
             termino = f"{magnitud:g}"
         else:
             factor = "" if magnitud == 1 else f"{magnitud:g}"
-            variable = "s" if potencia == 1 else f"s^{{{potencia}}}"
+            variable = (
+                "s"
+                if potencia == 1
+                else f"s^{{{potencia}}}"
+            )
             termino = factor + variable
 
         if not partes:
@@ -231,7 +237,9 @@ def simular(
     kd,
     beta
 ):
-    cantidad = int(np.floor(duracion / ts)) + 1
+    cantidad = int(
+        np.floor(duracion / ts)
+    ) + 1
 
     if cantidad > 50000:
         raise ValueError(
@@ -247,7 +255,10 @@ def simular(
     )
 
     tiempo = np.arange(cantidad) * ts
-    referencia_array = np.full(cantidad, referencia)
+    referencia_array = np.full(
+        cantidad,
+        referencia
+    )
 
     salida_array = np.zeros(cantidad)
     control_array = np.zeros(cantidad)
@@ -267,14 +278,19 @@ def simular(
 
     for k in range(cantidad):
 
-        salida = float((cd @ estado).item())
+        salida = float(
+            (cd @ estado).item()
+        )
 
         error = referencia_array[k] - salida
-        error_proporcional = beta * referencia_array[k] - salida
+        error_proporcional = (
+            beta * referencia_array[k] - salida
+        )
 
         derivada_filtrada = (
             alpha * derivada_filtrada
-            + (salida - salida_anterior) / (tf + ts)
+            + (salida - salida_anterior)
+            / (tf + ts)
         )
 
         p = kp * error_proporcional
@@ -284,10 +300,13 @@ def simular(
         control = p + i + deriv
 
         if (
-            not np.all(np.isfinite([salida, control]))
+            not np.all(
+                np.isfinite([salida, control])
+            )
             or max(abs(salida), abs(control)) > 1e8
         ):
             interrumpida = True
+            ultimo = k
             break
 
         salida_array[k] = salida
@@ -304,7 +323,6 @@ def simular(
         salida_anterior = salida
 
     if interrumpida:
-        ultimo = k
 
         tiempo = tiempo[:ultimo]
         referencia_array = referencia_array[:ultimo]
@@ -317,29 +335,49 @@ def simular(
         derivativa_array = derivativa_array[:ultimo]
 
     if len(tiempo) == 0:
-        raise ValueError("No se pudo calcular la respuesta.")
+        raise ValueError(
+            "No se pudo calcular la respuesta."
+        )
 
-    error_final = referencia_array[-1] - salida_array[-1]
+    error_final = (
+        referencia_array[-1] - salida_array[-1]
+    )
 
     if referencia != 0:
+
         sobreimpulso = max(
             0,
-            (np.max(salida_array) - referencia)
+            (
+                np.max(salida_array) - referencia
+            )
             / abs(referencia)
             * 100
         )
+
     else:
         sobreimpulso = 0.0
 
-    banda = max(0.02 * abs(referencia), 0.01)
+    banda = max(
+        0.02 * abs(referencia),
+        0.01
+    )
+
     fuera = np.where(
-        np.abs(referencia_array - salida_array) > banda
+        np.abs(
+            referencia_array - salida_array
+        ) > banda
     )[0]
 
     if len(fuera) == 0:
+
         tiempo_establecimiento = 0.0
+
     elif fuera[-1] < len(tiempo) - 1:
-        tiempo_establecimiento = tiempo[fuera[-1] + 1]
+
+        tiempo_establecimiento = (
+            tiempo[fuera[-1] + 1]
+        )
+
     else:
         tiempo_establecimiento = duracion
 
@@ -366,6 +404,7 @@ def simular(
 
 
 def estilo(figura, titulo):
+
     figura.update_layout(
         title=dict(
             text=titulo,
@@ -384,7 +423,12 @@ def estilo(figura, titulo):
             orientation="h",
             y=1.12
         ),
-        margin=dict(l=45, r=35, t=80, b=50)
+        margin=dict(
+            l=45,
+            r=35,
+            t=80,
+            b=50
+        )
     )
 
     figura.update_xaxes(
@@ -426,8 +470,15 @@ with st.sidebar:
 
     st.header("🧩 PLANTA G(s)")
 
-    num_texto = st.text_input("Numerador", "1, 1")
-    den_texto = st.text_input("Denominador", "1, 1, 2")
+    num_texto = st.text_input(
+        "Numerador",
+        "1, 1"
+    )
+
+    den_texto = st.text_input(
+        "Denominador",
+        "1, 1, 2"
+    )
 
     st.caption(
         "Coeficientes en potencias descendentes de s."
@@ -471,7 +522,7 @@ with st.sidebar:
 
 
 # =====================================================
-# CONFIGURACIÓN
+# CONTROLADOR
 # =====================================================
 
 st.subheader("🎛️ CONFIGURACIÓN DEL CONTROLADOR")
@@ -488,6 +539,7 @@ tipo_pid = st.radio(
 col1, col2 = st.columns(2)
 
 with col1:
+
     beta = st.number_input(
         "Ponderación de referencia β",
         min_value=0.0,
@@ -498,10 +550,14 @@ with col1:
     )
 
 with col2:
+
     if tipo_pid == "PID clásico (1 grado de libertad)":
+
         beta = 1.0
         st.success("PID clásico activo | β = 1")
+
     else:
+
         st.info("PID 2DOF activo | β configurable")
 
 
@@ -509,7 +565,10 @@ st.subheader("📈 GANANCIAS")
 
 modo = st.radio(
     "Forma de ajuste",
-    ["Valores exactos", "Deslizadores"],
+    [
+        "Valores exactos",
+        "Deslizadores"
+    ],
     horizontal=True
 )
 
@@ -521,8 +580,11 @@ for columna, nombre, inicial in zip(
     ["Kp", "Ki", "Kd"],
     [2.0, 1.0, 0.1]
 ):
+
     with columna:
+
         if modo == "Valores exactos":
+
             valor = st.number_input(
                 nombre,
                 min_value=0.0,
@@ -531,7 +593,9 @@ for columna, nombre, inicial in zip(
                 format="%.2f",
                 key=f"numero_{nombre}"
             )
+
         else:
+
             valor = st.slider(
                 nombre,
                 min_value=0.0,
@@ -543,47 +607,57 @@ for columna, nombre, inicial in zip(
 
         ganancias.append(valor)
 
+
 kp, ki, kd = ganancias
 
 
 # =====================================================
-# BOTONES DE SIMULACIÓN
+# BOTONES
 # =====================================================
 
 col_a, col_b = st.columns(2)
 
 with col_a:
+
     iniciar = st.button(
         "▶ INICIAR SIMULACIÓN",
         use_container_width=True
     )
 
 with col_b:
+
     limpiar = st.button(
         "⏹ LIMPIAR",
         use_container_width=True
     )
 
+
 if "ejecutar" not in st.session_state:
     st.session_state.ejecutar = False
+
 
 if iniciar:
     st.session_state.ejecutar = True
 
+
 if limpiar:
+
     st.session_state.ejecutar = False
     st.rerun()
 
+
 if not st.session_state.ejecutar:
+
     st.info(
-        "Configura la planta y las ganancias. "
-        "Luego pulsa INICIAR SIMULACIÓN."
+        "Configura la planta y pulsa "
+        "INICIAR SIMULACIÓN."
     )
+
     st.stop()
 
 
 # =====================================================
-# CÁLCULOS
+# SIMULACIÓN
 # =====================================================
 
 try:
@@ -592,11 +666,13 @@ try:
     den = leer_coeficientes(den_texto)
 
     if den.size < 2:
+
         raise ValueError(
             "El denominador debe tener grado de al menos 1."
         )
 
     if num.size >= den.size:
+
         raise ValueError(
             "La planta debe ser estrictamente propia."
         )
@@ -622,7 +698,6 @@ try:
         beta
     )
 
-    # Simulación PID clásico
     clasico = simular(
         num,
         den,
@@ -645,14 +720,16 @@ try:
     i = resultado["i"]
     d = resultado["d"]
 
+
     # =================================================
-    # ESTADO DEL SISTEMA
+    # ESTADO
     # =================================================
 
     if resultado["estable"]:
         st.success("● SISTEMA ESTABLE")
     else:
         st.error("● SISTEMA INESTABLE O INTERRUMPIDO")
+
 
     # =================================================
     # GRÁFICA DE PROCESO Y CONTROL
@@ -667,7 +744,10 @@ try:
             x=tiempo,
             y=r,
             name="Referencia r(t)",
-            line=dict(color="#ffb000", width=3),
+            line=dict(
+                color="#ffb000",
+                width=3
+            ),
             hovertemplate=(
                 "<b>Referencia r(t)</b><br>"
                 "Tiempo: %{x:.3f} s<br>"
@@ -684,7 +764,10 @@ try:
             x=tiempo,
             y=y,
             name="Salida y(t)",
-            line=dict(color="#5ffcff", width=3),
+            line=dict(
+                color="#5ffcff",
+                width=3
+            ),
             hovertemplate=(
                 "<b>Salida y(t)</b><br>"
                 "Tiempo: %{x:.3f} s<br>"
@@ -701,7 +784,10 @@ try:
             x=tiempo,
             y=u,
             name="Control u(t)",
-            line=dict(color="#ff2bd6", width=3),
+            line=dict(
+                color="#ff2bd6",
+                width=3
+            ),
             hovertemplate=(
                 "<b>Control u(t)</b><br>"
                 "Tiempo: %{x:.3f} s<br>"
@@ -724,7 +810,7 @@ try:
     )
 
     figura_proceso.update_yaxes(
-        title_text="Control u(t)",
+        title_text="Señal de control u(t)",
         secondary_y=True
     )
 
@@ -733,11 +819,12 @@ try:
         use_container_width=True
     )
 
+
     # =================================================
-    # GRÁFICA DE COMPARACIÓN
+    # COMPARACIÓN
     # =================================================
 
-    st.subheader("🔁 COMPARACIÓN DE CONTROLADORES")
+    st.subheader("🔁 COMPARACIÓN PID CLÁSICO VS PID 2DOF")
 
     comparacion = go.Figure()
 
@@ -780,13 +867,14 @@ try:
 
     comparacion = estilo(
         comparacion,
-        "COMPARACIÓN PID CLÁSICO VS PID 2DOF"
+        "COMPARACIÓN DE RESPUESTAS"
     )
 
     st.plotly_chart(
         comparacion,
         use_container_width=True
     )
+
 
     # =================================================
     # ERROR, INTEGRAL Y DERIVATIVA
@@ -799,7 +887,10 @@ try:
             x=tiempo,
             y=e,
             name="Error e(t)",
-            line=dict(color="#ff625f", width=3),
+            line=dict(
+                color="#ff625f",
+                width=3
+            ),
             hovertemplate=(
                 "<b>Error e(t)</b><br>"
                 "Tiempo: %{x:.3f} s<br>"
@@ -815,9 +906,12 @@ try:
             x=tiempo,
             y=i,
             name="Acción integral I(t)",
-            line=dict(color="#28d7a2", width=3),
+            line=dict(
+                color="#28d7a2",
+                width=3
+            ),
             hovertemplate=(
-                "<b>Integral I(t)</b><br>"
+                "<b>Acción integral I(t)</b><br>"
                 "Tiempo: %{x:.3f} s<br>"
                 "Posición: %{y:.4f}<br>"
                 "Ecuación: I(t) = Ki · ∫e(t)dt"
@@ -831,9 +925,12 @@ try:
             x=tiempo,
             y=d,
             name="Acción derivativa D(t)",
-            line=dict(color="#e879c9", width=3),
+            line=dict(
+                color="#e879c9",
+                width=3
+            ),
             hovertemplate=(
-                "<b>Derivativa D(t)</b><br>"
+                "<b>Acción derivativa D(t)</b><br>"
                 "Tiempo: %{x:.3f} s<br>"
                 "Posición: %{y:.4f}<br>"
                 "Ecuación: D(t) = −Kd · dy/dt"
@@ -852,12 +949,13 @@ try:
         use_container_width=True
     )
 
+
     # =================================================
     # COMPONENTES P, I Y D
     # =================================================
 
     with st.expander(
-        "📺 VER COMPONENTES PROPORCIONAL, INTEGRAL Y DERIVATIVO"
+        "📺 VER COMPONENTES P, I Y D"
     ):
 
         componentes = go.Figure()
@@ -867,7 +965,10 @@ try:
                 x=tiempo,
                 y=p,
                 name="Proporcional P(t)",
-                line=dict(color="#5ffcff", width=3)
+                line=dict(
+                    color="#5ffcff",
+                    width=3
+                )
             )
         )
 
@@ -876,7 +977,10 @@ try:
                 x=tiempo,
                 y=i,
                 name="Integral I(t)",
-                line=dict(color="#28d7a2", width=3)
+                line=dict(
+                    color="#28d7a2",
+                    width=3
+                )
             )
         )
 
@@ -885,7 +989,10 @@ try:
                 x=tiempo,
                 y=d,
                 name="Derivativa D(t)",
-                line=dict(color="#e879c9", width=3)
+                line=dict(
+                    color="#e879c9",
+                    width=3
+                )
             )
         )
 
@@ -898,6 +1005,7 @@ try:
             componentes,
             use_container_width=True
         )
+
 
     # =================================================
     # INDICADORES
@@ -927,33 +1035,64 @@ try:
         f"{resultado['ts_establecimiento']:.2f} s"
     )
 
+
     # =================================================
-    # DESCARGA CSV
+    # EXPORTACIÓN CSV PARA EXCEL
     # =================================================
 
-    datos = np.column_stack(
-        [tiempo, r, y, u, e, p, i, d]
-    )
+    st.subheader("💾 EXPORTAR RESULTADOS")
 
     archivo = io.StringIO()
 
-    np.savetxt(
+    escritor = csv.writer(
         archivo,
-        datos,
-        delimiter=",",
-        header=(
-            "tiempo,referencia,salida,control,"
-            "error,proporcional,integral,derivativa"
-        ),
-        comments=""
+        delimiter=";",
+        lineterminator="\n"
     )
 
+    escritor.writerow([
+        "Tiempo (s)",
+        "Referencia",
+        "Salida",
+        "Control",
+        "Error",
+        "Proporcional",
+        "Integral",
+        "Derivativa"
+    ])
+
+    for fila in zip(
+        tiempo,
+        r,
+        y,
+        u,
+        e,
+        p,
+        i,
+        d
+    ):
+        escritor.writerow([
+            f"{fila[0]:.6f}",
+            f"{fila[1]:.6f}",
+            f"{fila[2]:.6f}",
+            f"{fila[3]:.6f}",
+            f"{fila[4]:.6f}",
+            f"{fila[5]:.6f}",
+            f"{fila[6]:.6f}",
+            f"{fila[7]:.6f}"
+        ])
+
     st.download_button(
-        label="⬇️ DESCARGAR RESULTADOS CSV",
+        label="⬇️ DESCARGAR RESULTADOS PARA EXCEL",
         data=archivo.getvalue(),
         file_name="resultados_pid.csv",
         mime="text/csv",
         use_container_width=True
+    )
+
+    st.caption(
+        "El archivo utiliza punto y coma como separador "
+        "para abrir correctamente en Excel."
     )
 
 
