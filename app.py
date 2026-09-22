@@ -245,7 +245,3 @@ try:
 
 except (ValueError, OverflowError, np.linalg.LinAlgError) as error:
     st.error(str(error))
-
-numpy
-scipy
-plotly
