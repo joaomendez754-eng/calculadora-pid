@@ -3,14 +3,22 @@ import streamlit as st
 import plotly.graph_objects as go
 from scipy.signal import tf2ss, cont2discrete
 
+
 st.set_page_config(page_title="Calculadora PID", layout="wide")
 
 st.title("Calculadora PID")
-st.write("Ingresa tu planta y modifica las ganancias para observar la respuesta.")
+st.write(
+    "Ingresa tu planta y modifica las ganancias para observar la respuesta."
+)
 
 
 def leer_coeficientes(texto):
-    texto = texto.replace("[", "").replace("]", "").replace(",", " ")
+    texto = (
+        texto.replace("[", "")
+        .replace("]", "")
+        .replace(",", " ")
+    )
+
     valores = np.array([float(x) for x in texto.split()])
 
     if valores.size == 0 or not np.all(np.isfinite(valores)):
@@ -41,92 +49,202 @@ def polinomio(coeficientes):
         if not partes:
             partes.append(("-" if valor < 0 else "") + termino)
         else:
-            partes.append((" - " if valor < 0 else " + ") + termino)
+            partes.append(
+                (" - " if valor < 0 else " + ") + termino
+            )
 
     return "".join(partes) or "0"
 
 
 with st.sidebar:
     st.header("Planta G(s)")
-    num_texto = st.text_input("Numerador", "1, 1")
-    den_texto = st.text_input("Denominador", "1, 1, 2")
+
+    num_texto = st.text_input(
+        "Numerador",
+        "1, 1"
+    )
+
+    den_texto = st.text_input(
+        "Denominador",
+        "1, 1, 2"
+    )
+
     st.caption(
         "Coeficientes en potencias descendentes de s. "
         "Usa punto para decimales e incluye los ceros."
     )
 
     st.header("Simulación")
-    referencia = st.number_input("Referencia", value=1.0, step=0.1)
-    duracion = st.number_input(
-        "Duración (s)", min_value=1.0, max_value=300.0,
-        value=20.0, step=1.0
-    )
-    ts = st.number_input(
-        "Periodo de muestreo Ts (s)",
-        min_value=0.001, max_value=1.0,
-        value=0.1, step=0.01, format="%.3f"
-    )
-    tf = st.number_input(
-        "Filtro derivativo Tf (s)",
-        min_value=0.001, max_value=10.0,
-        value=0.1, step=0.01, format="%.3f"
+
+    referencia = st.number_input(
+        "Referencia",
+        value=1.0,
+        step=0.1
     )
 
+    duracion = st.number_input(
+        "Duración (s)",
+        min_value=1.0,
+        max_value=300.0,
+        value=20.0,
+        step=1.0
+    )
+
+    ts = st.number_input(
+        "Periodo de muestreo Ts (s)",
+        min_value=0.001,
+        max_value=1.0,
+        value=0.1,
+        step=0.01,
+        format="%.3f"
+    )
+
+    tf = st.number_input(
+        "Filtro derivativo Tf (s)",
+        min_value=0.001,
+        max_value=10.0,
+        value=0.1,
+        step=0.01,
+        format="%.3f"
+    )
+
+
+st.subheader("Tipo de controlador")
+
+tipo_pid = st.radio(
+    "Selecciona el controlador",
+    [
+        "PID clásico (1 grado de libertad)",
+        "PID de dos grados de libertad"
+    ],
+    horizontal=True
+)
+
+col_beta, col_info = st.columns(2)
+
+with col_beta:
+    beta = st.number_input(
+        "Ponderación de la referencia β",
+        min_value=0.0,
+        max_value=1.0,
+        value=1.0,
+        step=0.05,
+        format="%.2f",
+        help=(
+            "β=1 equivale al PID clásico. "
+            "Valores menores reducen la acción proporcional "
+            "ante cambios de referencia."
+        )
+    )
+
+with col_info:
+    if tipo_pid == "PID clásico (1 grado de libertad)":
+        beta = 1.0
+        st.info("En el PID clásico se utiliza β = 1.")
+
+    else:
+        st.info(
+            "PID 2DOF activo. Puedes modificar la ponderación β."
+        )
+
+
 st.subheader("Ganancias del controlador")
+
 modo = st.radio(
-    "Forma de ajuste", ["Valores exactos", "Deslizadores"], horizontal=True
+    "Forma de ajuste",
+    ["Valores exactos", "Deslizadores"],
+    horizontal=True
 )
 
 columnas = st.columns(3)
 ganancias = []
 
 for columna, nombre, inicial in zip(
-    columnas, ["Kp", "Ki", "Kd"], [2.0, 1.0, 0.1]
+    columnas,
+    ["Kp", "Ki", "Kd"],
+    [2.0, 1.0, 0.1]
 ):
     with columna:
+
         if modo == "Valores exactos":
             valor = st.number_input(
-                nombre, min_value=0.0, value=inicial,
-                step=0.01, format="%.2f", key=f"numero_{nombre}"
+                nombre,
+                min_value=0.0,
+                value=inicial,
+                step=0.01,
+                format="%.2f",
+                key=f"numero_{nombre}"
             )
+
         else:
             valor = st.slider(
-                nombre, min_value=0.0, max_value=20.0,
-                value=inicial, step=0.01, key=f"slider_{nombre}"
+                nombre,
+                min_value=0.0,
+                max_value=20.0,
+                value=inicial,
+                step=0.01,
+                key=f"slider_{nombre}"
             )
+
         ganancias.append(valor)
+
 
 kp, ki, kd = ganancias
 
+
 st.caption(
-    "Realimentación negativa unitaria y condiciones iniciales cero. "
-    "La derivada se aplica sobre la salida y se filtra para evitar "
-    "un pico derivativo al cambiar la referencia. Sin saturación del actuador."
+    "Realimentación negativa unitaria. En el PID de dos grados "
+    "de libertad, β pondera la referencia en la acción proporcional. "
+    "La acción integral utiliza el error completo y la derivada "
+    "se aplica sobre la salida para evitar el pico derivativo."
 )
+
 
 try:
     num = leer_coeficientes(num_texto)
     den = leer_coeficientes(den_texto)
 
     if den.size < 2:
-        raise ValueError("El denominador debe tener grado de al menos 1.")
+        raise ValueError(
+            "El denominador debe tener grado de al menos 1."
+        )
+
     if num.size == 0:
-        raise ValueError("El numerador no puede ser completamente cero.")
+        raise ValueError(
+            "El numerador no puede ser completamente cero."
+        )
+
     if num.size >= den.size:
         raise ValueError(
             "Esta versión requiere una planta estrictamente propia: "
-            "grado del numerador menor que el del denominador."
+            "el grado del numerador debe ser menor que el del denominador."
         )
 
-    st.latex(r"G(s)=\frac{" + polinomio(num) + "}{" + polinomio(den) + "}")
+    st.latex(
+        r"G(s)=\frac{"
+        + polinomio(num)
+        + "}{"
+        + polinomio(den)
+        + "}"
+    )
 
     cantidad = int(np.floor(duracion / ts)) + 1
-    if cantidad > 50000:
-        raise ValueError("Reduce la duración o aumenta Ts: máximo 50 000 muestras.")
 
-    # Planta discretizada con retención de orden cero (ZOH).
+    if cantidad > 50000:
+        raise ValueError(
+            "Reduce la duración o aumenta Ts: "
+            "máximo 50 000 muestras."
+        )
+
+    # Conversión de la planta continua a espacio de estados
+    # y discretización mediante ZOH.
     a, b, c, d = tf2ss(num, den)
-    ad, bd, cd, dd, _ = cont2discrete((a, b, c, d), ts, method="zoh")
+
+    ad, bd, cd, dd, _ = cont2discrete(
+        (a, b, c, d),
+        ts,
+        method="zoh"
+    )
 
     t = np.arange(cantidad) * ts
     r = np.full(cantidad, referencia)
@@ -138,25 +256,39 @@ try:
     derivativa = np.zeros(cantidad)
 
     estado = np.zeros(ad.shape[0])
+
     acumulado = 0.0
     derivada = 0.0
     y_anterior = 0.0
+
     alpha = tf / (tf + ts)
     interrumpida = False
 
     for k in range(cantidad):
-        salida = float((cd @ estado).item())
-        error = r[k] - salida
 
-        # Derivada filtrada de la medida.
+        # Salida de la planta
+        salida = float((cd @ estado).item())
+
+        # Error completo para la acción integral
+        error_integral = r[k] - salida
+
+        # Error proporcional según el tipo de PID
+        if tipo_pid == "PID de dos grados de libertad":
+            error_proporcional = beta * r[k] - salida
+        else:
+            error_proporcional = error_integral
+
+        # Derivada filtrada aplicada sobre la salida
         derivada = (
             alpha * derivada
             + (salida - y_anterior) / (tf + ts)
         )
 
-        p = kp * error
+        # Componentes del controlador
+        p = kp * error_proporcional
         i = ki * acumulado
         deriv = -kd * derivada
+
         control = p + i + deriv
 
         if (
@@ -164,84 +296,144 @@ try:
             or max(abs(salida), abs(control)) > 1e8
         ):
             interrumpida = True
-            t, r, y, u = t[:k], r[:k], y[:k], u[:k]
+
+            t = t[:k]
+            r = r[:k]
+            y = y[:k]
+            u = u[:k]
+
             proporcional = proporcional[:k]
             integral = integral[:k]
             derivativa = derivativa[:k]
+
             break
 
         y[k] = salida
         u[k] = control
+
         proporcional[k] = p
         integral[k] = i
         derivativa[k] = deriv
 
-        # u[k] actúa durante el siguiente intervalo de muestreo.
-        estado = ad @ estado + bd[:, 0] * control
-        acumulado += error * ts
+        # Actualización del estado de la planta
+        estado = (
+            ad @ estado
+            + bd[:, 0] * control
+        )
+
+        # La integral utiliza el error completo
+        acumulado += error_integral * ts
+
         y_anterior = salida
 
     if interrumpida:
         st.warning(
-            "Simulación detenida por valores excesivos. "
-            "Revisa las ganancias, la planta y el periodo de muestreo. "
-            "Las gráficas muestran únicamente el tramo calculado."
+            "La simulación se detuvo por valores excesivos. "
+            "Revisa las ganancias, la planta y el periodo de muestreo."
         )
 
     if len(t) == 0:
-        raise ValueError("No se pudo calcular una respuesta con estos valores.")
+        raise ValueError(
+            "No se pudo calcular una respuesta con estos valores."
+        )
 
     def grafica(titulo, series, escalonada=False):
         fig = go.Figure()
+
         for nombre, datos, color in series:
-            fig.add_trace(go.Scatter(
-                x=t,
-                y=datos,
-                name=nombre,
-                mode="lines",
-                line=dict(
-                    color=color,
-                    width=2.5,
-                    shape="hv" if escalonada else "linear"
+            fig.add_trace(
+                go.Scatter(
+                    x=t,
+                    y=datos,
+                    name=nombre,
+                    mode="lines",
+                    line=dict(
+                        color=color,
+                        width=2.5,
+                        shape="hv" if escalonada else "linear"
+                    )
                 )
-            ))
+            )
+
         fig.update_layout(
             title=titulo,
             xaxis_title="Tiempo (s)",
             yaxis_title="Amplitud",
             height=420,
-            margin=dict(l=30, r=20, t=60, b=40),
-            legend=dict(orientation="h", y=1.12),
+            margin=dict(
+                l=30,
+                r=20,
+                t=60,
+                b=40
+            ),
+            legend=dict(
+                orientation="h",
+                y=1.12
+            ),
             hovermode="x unified"
         )
-        st.plotly_chart(fig, use_container_width=True)
 
-    grafica("Referencia y salida", [
-        ("Referencia r(t)", r, "#e69f00"),
-        ("Salida y(t)", y, "#0072b2")
-    ])
+        st.plotly_chart(
+            fig,
+            use_container_width=True
+        )
 
-    grafica("Entrada a la planta: acción de control", [
-        ("Control u(t)", u, "#009e73")
-    ], escalonada=True)
-
-    with st.expander("Ver las contribuciones proporcional, integral y derivativa"):
-        grafica("Componentes del PID", [
-            ("Proporcional", proporcional, "#0072b2"),
-            ("Integral", integral, "#009e73"),
-            ("Derivativa", derivativa, "#cc79a7")
-        ], escalonada=True)
-
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Última salida calculada", f"{y[-1]:.4f}")
-    m2.metric("Último error calculado", f"{r[-1] - y[-1]:.4f}")
-    m3.metric("Máximo |u| calculado", f"{np.max(np.abs(u)):.4f}")
-
-    st.caption(
-        "Estos valores corresponden al intervalo simulado; "
-        "no garantizan que se haya alcanzado el estado estacionario. "
-        "Cada cambio recalcula la simulación desde cero."
+    grafica(
+        "Referencia y salida",
+        [
+            ("Referencia r(t)", r, "#e69f00"),
+            ("Salida y(t)", y, "#0072b2")
+        ]
     )
 
-except (ValueError, OverflowError, np.linalg.LinAlgError) as error:
+    grafica(
+        "Entrada a la planta: acción de control",
+        [
+            ("Control u(t)", u, "#009e73")
+        ],
+        escalonada=True
+    )
+
+    with st.expander(
+        "Ver las contribuciones proporcional, integral y derivativa"
+    ):
+        grafica(
+            "Componentes del PID",
+            [
+                ("Proporcional", proporcional, "#0072b2"),
+                ("Integral", integral, "#009e73"),
+                ("Derivativa", derivativa, "#cc79a7")
+            ],
+            escalonada=True
+        )
+
+    m1, m2, m3 = st.columns(3)
+
+    m1.metric(
+        "Última salida calculada",
+        f"{y[-1]:.4f}"
+    )
+
+    m2.metric(
+        "Último error calculado",
+        f"{r[-1] - y[-1]:.4f}"
+    )
+
+    m3.metric(
+        "Máximo |u| calculado",
+        f"{np.max(np.abs(u)):.4f}"
+    )
+
+    st.caption(
+        "Cada cambio en la planta, referencia o controlador "
+        "recalcula la simulación desde cero."
+    )
+
+
+except (
+    ValueError,
+    OverflowError,
+    np.linalg.LinAlgError
+) as error:
+
     st.error(str(error))
