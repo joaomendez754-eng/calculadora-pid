@@ -4,27 +4,149 @@ import plotly.graph_objects as go
 from scipy.signal import tf2ss, cont2discrete
 
 
-st.set_page_config(page_title="Calculadora PID", layout="wide")
-
-st.title("Calculadora PID")
-st.write(
-    "Ingresa tu planta y modifica las ganancias para observar la respuesta."
+st.set_page_config(
+    page_title="Calculadora PID",
+    page_icon="⚙️",
+    layout="wide"
 )
 
 
+# =========================
+# ESTÉTICA DE LA APLICACIÓN
+# =========================
+
+st.markdown(
+    """
+    <style>
+
+    .stApp {
+        background:
+            radial-gradient(
+                circle at top right,
+                #182848 0%,
+                #0b1020 45%,
+                #070a13 100%
+            );
+        color: #f5f7ff;
+    }
+
+    [data-testid="stSidebar"] {
+        background: linear-gradient(
+            180deg,
+            #111936 0%,
+            #0b1020 100%
+        );
+        border-right: 1px solid #26345f;
+    }
+
+    h1 {
+        font-size: 3rem !important;
+        font-weight: 800 !important;
+        color: #ffffff;
+        letter-spacing: -1px;
+    }
+
+    h2, h3 {
+        color: #dce7ff;
+    }
+
+    p, label {
+        color: #b9c6e4 !important;
+    }
+
+    div[data-testid="stMetric"] {
+        background: linear-gradient(
+            135deg,
+            rgba(35, 52, 100, 0.95),
+            rgba(20, 29, 62, 0.95)
+        );
+        border: 1px solid #3b55a0;
+        border-radius: 18px;
+        padding: 20px;
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.25);
+    }
+
+    div[data-testid="stMetricLabel"] {
+        color: #9eb4e8 !important;
+    }
+
+    div[data-testid="stMetricValue"] {
+        color: #65d9ff !important;
+        font-weight: 800;
+    }
+
+    .stButton > button {
+        background: linear-gradient(
+            90deg,
+            #5b5ff0,
+            #9b51e0
+        );
+        color: white;
+        border: none;
+        border-radius: 12px;
+        font-weight: 700;
+        padding: 0.6rem 1rem;
+        transition: 0.25s;
+    }
+
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(115, 98, 255, 0.45);
+    }
+
+    .stTextInput input,
+    .stNumberInput input {
+        background: #11182d !important;
+        color: #ffffff !important;
+        border: 1px solid #3d518c !important;
+        border-radius: 10px !important;
+    }
+
+    div[data-baseweb="select"] > div {
+        background-color: #11182d;
+        border: 1px solid #3d518c;
+        border-radius: 10px;
+    }
+
+    div[data-testid="stExpander"] {
+        background: rgba(20, 30, 65, 0.75);
+        border: 1px solid #344b88;
+        border-radius: 16px;
+    }
+
+    hr {
+        border-color: #293a70;
+    }
+
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+
+# =========================
+# FUNCIONES
+# =========================
+
 def leer_coeficientes(texto):
     texto = (
-        texto.replace("[", "")
+        texto
+        .replace("[", "")
         .replace("]", "")
         .replace(",", " ")
     )
 
-    valores = np.array([float(x) for x in texto.split()])
+    valores = np.array(
+        [float(x) for x in texto.split()]
+    )
 
     if valores.size == 0 or not np.all(np.isfinite(valores)):
-        raise ValueError("Ingresa coeficientes numéricos válidos.")
+        raise ValueError(
+            "Ingresa coeficientes numéricos válidos."
+        )
 
     valores = np.trim_zeros(valores, "f")
+
     return valores
 
 
@@ -33,6 +155,7 @@ def polinomio(coeficientes):
     grado = len(coeficientes) - 1
 
     for indice, valor in enumerate(coeficientes):
+
         if valor == 0:
             continue
 
@@ -41,13 +164,23 @@ def polinomio(coeficientes):
 
         if potencia == 0:
             termino = f"{magnitud:g}"
+
         else:
             factor = "" if magnitud == 1 else f"{magnitud:g}"
-            variable = "s" if potencia == 1 else f"s^{{{potencia}}}"
+
+            variable = (
+                "s"
+                if potencia == 1
+                else f"s^{{{potencia}}}"
+            )
+
             termino = factor + variable
 
         if not partes:
-            partes.append(("-" if valor < 0 else "") + termino)
+            partes.append(
+                ("-" if valor < 0 else "") + termino
+            )
+
         else:
             partes.append(
                 (" - " if valor < 0 else " + ") + termino
@@ -56,8 +189,107 @@ def polinomio(coeficientes):
     return "".join(partes) or "0"
 
 
+def grafica(titulo, tiempo, series, escalonada=False):
+    figura = go.Figure()
+
+    for nombre, datos, color in series:
+        figura.add_trace(
+            go.Scatter(
+                x=tiempo,
+                y=datos,
+                name=nombre,
+                mode="lines",
+                line=dict(
+                    color=color,
+                    width=3,
+                    shape="hv" if escalonada else "linear"
+                )
+            )
+        )
+
+    figura.update_layout(
+        title=dict(
+            text=titulo,
+            font=dict(
+                size=22,
+                color="#dce7ff"
+            )
+        ),
+        xaxis_title="Tiempo (s)",
+        yaxis_title="Amplitud",
+        height=450,
+        margin=dict(
+            l=30,
+            r=20,
+            t=70,
+            b=40
+        ),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(9,15,32,0.75)",
+        font=dict(color="#dce7ff"),
+        legend=dict(
+            orientation="h",
+            y=1.12
+        ),
+        hovermode="x unified",
+        xaxis=dict(
+            gridcolor="#28365e",
+            zerolinecolor="#526ca8"
+        ),
+        yaxis=dict(
+            gridcolor="#28365e",
+            zerolinecolor="#526ca8"
+        )
+    )
+
+    st.plotly_chart(
+        figura,
+        use_container_width=True
+    )
+
+
+# =========================
+# ENCABEZADO
+# =========================
+
+st.markdown(
+    """
+    <div style="
+        padding: 28px;
+        border-radius: 22px;
+        margin-bottom: 25px;
+        background: linear-gradient(
+            135deg,
+            rgba(40, 57, 120, 0.95),
+            rgba(92, 48, 145, 0.90)
+        );
+        box-shadow: 0 12px 35px rgba(0,0,0,0.3);
+    ">
+        <h1 style="margin-bottom: 8px;">
+            ⚙️ Calculadora PID
+        </h1>
+
+        <p style="
+            font-size: 1.1rem;
+            color: #dbe5ff !important;
+            margin-bottom: 0;
+        ">
+            Simula plantas, ajusta Kp, Ki y Kd,
+            y analiza la respuesta del sistema.
+        </p>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+
+# =========================
+# PANEL LATERAL
+# =========================
+
 with st.sidebar:
-    st.header("Planta G(s)")
+
+    st.header("🧩 Planta G(s)")
 
     num_texto = st.text_input(
         "Numerador",
@@ -70,11 +302,13 @@ with st.sidebar:
     )
 
     st.caption(
-        "Coeficientes en potencias descendentes de s. "
-        "Usa punto para decimales e incluye los ceros."
+        "Escribe los coeficientes en potencias descendentes "
+        "de s. Usa punto para decimales."
     )
 
-    st.header("Simulación")
+    st.divider()
+
+    st.header("⏱️ Simulación")
 
     referencia = st.number_input(
         "Referencia",
@@ -83,7 +317,7 @@ with st.sidebar:
     )
 
     duracion = st.number_input(
-        "Duración (s)",
+        "Duración de simulación (s)",
         min_value=1.0,
         max_value=300.0,
         value=20.0,
@@ -109,10 +343,14 @@ with st.sidebar:
     )
 
 
-st.subheader("Tipo de controlador")
+# =========================
+# TIPO DE CONTROLADOR
+# =========================
+
+st.subheader("🎛️ Tipo de controlador")
 
 tipo_pid = st.radio(
-    "Selecciona el controlador",
+    "Selecciona el tipo de PID",
     [
         "PID clásico (1 grado de libertad)",
         "PID de dos grados de libertad"
@@ -120,9 +358,11 @@ tipo_pid = st.radio(
     horizontal=True
 )
 
-col_beta, col_info = st.columns(2)
+
+col_beta, col_estado = st.columns(2)
 
 with col_beta:
+
     beta = st.number_input(
         "Ponderación de la referencia β",
         min_value=0.0,
@@ -137,22 +377,36 @@ with col_beta:
         )
     )
 
-with col_info:
+
+with col_estado:
+
     if tipo_pid == "PID clásico (1 grado de libertad)":
+
         beta = 1.0
-        st.info("En el PID clásico se utiliza β = 1.")
+
+        st.success(
+            "PID clásico activo. β = 1"
+        )
 
     else:
+
         st.info(
-            "PID 2DOF activo. Puedes modificar la ponderación β."
+            "PID de dos grados de libertad activo."
         )
 
 
-st.subheader("Ganancias del controlador")
+# =========================
+# GANANCIAS
+# =========================
+
+st.subheader("📈 Ganancias del controlador")
 
 modo = st.radio(
     "Forma de ajuste",
-    ["Valores exactos", "Deslizadores"],
+    [
+        "Valores exactos",
+        "Deslizadores"
+    ],
     horizontal=True
 )
 
@@ -164,9 +418,11 @@ for columna, nombre, inicial in zip(
     ["Kp", "Ki", "Kd"],
     [2.0, 1.0, 0.1]
 ):
+
     with columna:
 
         if modo == "Valores exactos":
+
             valor = st.number_input(
                 nombre,
                 min_value=0.0,
@@ -177,6 +433,7 @@ for columna, nombre, inicial in zip(
             )
 
         else:
+
             valor = st.slider(
                 nombre,
                 min_value=0.0,
@@ -193,14 +450,20 @@ kp, ki, kd = ganancias
 
 
 st.caption(
-    "Realimentación negativa unitaria. En el PID de dos grados "
-    "de libertad, β pondera la referencia en la acción proporcional. "
-    "La acción integral utiliza el error completo y la derivada "
-    "se aplica sobre la salida para evitar el pico derivativo."
+    "Realimentación negativa unitaria. "
+    "El PID 2DOF usa β para ponderar la referencia "
+    "en la acción proporcional. "
+    "La derivada se aplica sobre la salida para evitar "
+    "un pico derivativo ante un cambio de referencia."
 )
 
 
+# =========================
+# SIMULACIÓN
+# =========================
+
 try:
+
     num = leer_coeficientes(num_texto)
     den = leer_coeficientes(den_texto)
 
@@ -216,8 +479,9 @@ try:
 
     if num.size >= den.size:
         raise ValueError(
-            "Esta versión requiere una planta estrictamente propia: "
-            "el grado del numerador debe ser menor que el del denominador."
+            "La planta debe ser estrictamente propia: "
+            "el grado del numerador debe ser menor que "
+            "el grado del denominador."
         )
 
     st.latex(
@@ -228,205 +492,246 @@ try:
         + "}"
     )
 
-    cantidad = int(np.floor(duracion / ts)) + 1
+    cantidad = int(
+        np.floor(duracion / ts)
+    ) + 1
 
     if cantidad > 50000:
         raise ValueError(
-            "Reduce la duración o aumenta Ts: "
-            "máximo 50 000 muestras."
+            "Reduce la duración o aumenta Ts. "
+            "Máximo 50 000 muestras."
         )
 
-    # Conversión de la planta continua a espacio de estados
-    # y discretización mediante ZOH.
+    # Conversión de la planta a espacio de estados
     a, b, c, d = tf2ss(num, den)
 
+    # Discretización mediante ZOH
     ad, bd, cd, dd, _ = cont2discrete(
         (a, b, c, d),
         ts,
         method="zoh"
     )
 
-    t = np.arange(cantidad) * ts
-    r = np.full(cantidad, referencia)
-    y = np.zeros(cantidad)
-    u = np.zeros(cantidad)
+    tiempo = np.arange(cantidad) * ts
+    referencia_array = np.full(
+        cantidad,
+        referencia
+    )
 
-    proporcional = np.zeros(cantidad)
-    integral = np.zeros(cantidad)
-    derivativa = np.zeros(cantidad)
+    salida_array = np.zeros(cantidad)
+    control_array = np.zeros(cantidad)
 
-    estado = np.zeros(ad.shape[0])
+    proporcional_array = np.zeros(cantidad)
+    integral_array = np.zeros(cantidad)
+    derivativa_array = np.zeros(cantidad)
 
-    acumulado = 0.0
-    derivada = 0.0
-    y_anterior = 0.0
+    estado_planta = np.zeros(
+        ad.shape[0]
+    )
+
+    acumulado_integral = 0.0
+    derivada_filtrada = 0.0
+    salida_anterior = 0.0
 
     alpha = tf / (tf + ts)
     interrumpida = False
 
     for k in range(cantidad):
 
-        # Salida de la planta
-        salida = float((cd @ estado).item())
-
-        # Error completo para la acción integral
-        error_integral = r[k] - salida
-
-        # Error proporcional según el tipo de PID
-        if tipo_pid == "PID de dos grados de libertad":
-            error_proporcional = beta * r[k] - salida
-        else:
-            error_proporcional = error_integral
-
-        # Derivada filtrada aplicada sobre la salida
-        derivada = (
-            alpha * derivada
-            + (salida - y_anterior) / (tf + ts)
+        # Salida actual de la planta
+        salida = float(
+            (cd @ estado_planta).item()
         )
 
-        # Componentes del controlador
-        p = kp * error_proporcional
-        i = ki * acumulado
-        deriv = -kd * derivada
+        # Error completo para la acción integral
+        error_integral = (
+            referencia_array[k] - salida
+        )
 
-        control = p + i + deriv
+        # Error proporcional
+        if tipo_pid == "PID de dos grados de libertad":
 
+            error_proporcional = (
+                beta * referencia_array[k] - salida
+            )
+
+        else:
+
+            error_proporcional = error_integral
+
+        # Derivada filtrada sobre la salida
+        derivada_filtrada = (
+            alpha * derivada_filtrada
+            + (salida - salida_anterior)
+            / (tf + ts)
+        )
+
+        # Componentes del PID
+        componente_p = (
+            kp * error_proporcional
+        )
+
+        componente_i = (
+            ki * acumulado_integral
+        )
+
+        componente_d = (
+            -kd * derivada_filtrada
+        )
+
+        control = (
+            componente_p
+            + componente_i
+            + componente_d
+        )
+
+        # Protección numérica
         if (
-            not np.all(np.isfinite([salida, control]))
-            or max(abs(salida), abs(control)) > 1e8
+            not np.all(
+                np.isfinite(
+                    [salida, control]
+                )
+            )
+            or max(
+                abs(salida),
+                abs(control)
+            ) > 1e8
         ):
+
             interrumpida = True
 
-            t = t[:k]
-            r = r[:k]
-            y = y[:k]
-            u = u[:k]
+            tiempo = tiempo[:k]
+            referencia_array = referencia_array[:k]
+            salida_array = salida_array[:k]
+            control_array = control_array[:k]
 
-            proporcional = proporcional[:k]
-            integral = integral[:k]
-            derivativa = derivativa[:k]
+            proporcional_array = proporcional_array[:k]
+            integral_array = integral_array[:k]
+            derivativa_array = derivativa_array[:k]
 
             break
 
-        y[k] = salida
-        u[k] = control
+        salida_array[k] = salida
+        control_array[k] = control
 
-        proporcional[k] = p
-        integral[k] = i
-        derivativa[k] = deriv
+        proporcional_array[k] = componente_p
+        integral_array[k] = componente_i
+        derivativa_array[k] = componente_d
 
-        # Actualización del estado de la planta
-        estado = (
-            ad @ estado
+        # Actualización de la planta
+        estado_planta = (
+            ad @ estado_planta
             + bd[:, 0] * control
         )
 
         # La integral utiliza el error completo
-        acumulado += error_integral * ts
+        acumulado_integral += (
+            error_integral * ts
+        )
 
-        y_anterior = salida
+        salida_anterior = salida
 
     if interrumpida:
+
         st.warning(
             "La simulación se detuvo por valores excesivos. "
-            "Revisa las ganancias, la planta y el periodo de muestreo."
+            "Revisa las ganancias, la planta o Ts."
         )
 
-    if len(t) == 0:
+    if len(tiempo) == 0:
+
         raise ValueError(
-            "No se pudo calcular una respuesta con estos valores."
+            "No se pudo calcular una respuesta válida."
         )
 
-    def grafica(titulo, series, escalonada=False):
-        fig = go.Figure()
-
-        for nombre, datos, color in series:
-            fig.add_trace(
-                go.Scatter(
-                    x=t,
-                    y=datos,
-                    name=nombre,
-                    mode="lines",
-                    line=dict(
-                        color=color,
-                        width=2.5,
-                        shape="hv" if escalonada else "linear"
-                    )
-                )
-            )
-
-        fig.update_layout(
-            title=titulo,
-            xaxis_title="Tiempo (s)",
-            yaxis_title="Amplitud",
-            height=420,
-            margin=dict(
-                l=30,
-                r=20,
-                t=60,
-                b=40
-            ),
-            legend=dict(
-                orientation="h",
-                y=1.12
-            ),
-            hovermode="x unified"
-        )
-
-        st.plotly_chart(
-            fig,
-            use_container_width=True
-        )
+    # =========================
+    # GRÁFICAS
+    # =========================
 
     grafica(
-        "Referencia y salida",
+        "Respuesta de la planta",
+        tiempo,
         [
-            ("Referencia r(t)", r, "#e69f00"),
-            ("Salida y(t)", y, "#0072b2")
+            (
+                "Referencia r(t)",
+                referencia_array,
+                "#ffb000"
+            ),
+            (
+                "Salida y(t)",
+                salida_array,
+                "#48c9ff"
+            )
         ]
     )
 
     grafica(
-        "Entrada a la planta: acción de control",
+        "Acción de control",
+        tiempo,
         [
-            ("Control u(t)", u, "#009e73")
+            (
+                "Control u(t)",
+                control_array,
+                "#28d7a2"
+            )
         ],
         escalonada=True
     )
 
     with st.expander(
-        "Ver las contribuciones proporcional, integral y derivativa"
+        "🔍 Ver componentes proporcional, integral y derivativa"
     ):
+
         grafica(
-            "Componentes del PID",
+            "Componentes del controlador",
+            tiempo,
             [
-                ("Proporcional", proporcional, "#0072b2"),
-                ("Integral", integral, "#009e73"),
-                ("Derivativa", derivativa, "#cc79a7")
+                (
+                    "Proporcional",
+                    proporcional_array,
+                    "#48c9ff"
+                ),
+                (
+                    "Integral",
+                    integral_array,
+                    "#28d7a2"
+                ),
+                (
+                    "Derivativa",
+                    derivativa_array,
+                    "#e879c9"
+                )
             ],
             escalonada=True
         )
 
-    m1, m2, m3 = st.columns(3)
+    # =========================
+    # INDICADORES
+    # =========================
 
-    m1.metric(
+    st.subheader("📊 Indicadores de desempeño")
+
+    metricas = st.columns(3)
+
+    metricas[0].metric(
         "Última salida calculada",
-        f"{y[-1]:.4f}"
+        f"{salida_array[-1]:.4f}"
     )
 
-    m2.metric(
+    metricas[1].metric(
         "Último error calculado",
-        f"{r[-1] - y[-1]:.4f}"
+        f"{referencia_array[-1] - salida_array[-1]:.4f}"
     )
 
-    m3.metric(
+    metricas[2].metric(
         "Máximo |u| calculado",
-        f"{np.max(np.abs(u)):.4f}"
+        f"{np.max(np.abs(control_array)):.4f}"
     )
 
     st.caption(
-        "Cada cambio en la planta, referencia o controlador "
-        "recalcula la simulación desde cero."
+        "Cada cambio en la planta, referencia, ganancias "
+        "o tipo de controlador recalcula la simulación "
+        "desde cero."
     )
 
 
