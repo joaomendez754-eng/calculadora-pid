@@ -1,121 +1,189 @@
 import numpy as np
 import streamlit as st
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from scipy.signal import tf2ss, cont2discrete
 
 
 st.set_page_config(
-    page_title="Calculadora PID",
-    page_icon="⚙️",
+    page_title="PID TV Control",
+    page_icon="📺",
     layout="wide"
 )
 
 
-# =========================
-# ESTÉTICA DE LA APLICACIÓN
-# =========================
+# =====================================================
+# ESTÉTICA RETROFUTURISTA
+# =====================================================
 
 st.markdown(
     """
     <style>
 
+    @import url(
+        'https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800&display=swap'
+    );
+
     .stApp {
         background:
             radial-gradient(
-                circle at top right,
-                #182848 0%,
-                #0b1020 45%,
-                #070a13 100%
+                circle at 50% -20%,
+                #3b0b55 0%,
+                #180c32 35%,
+                #090b1b 72%,
+                #03040b 100%
             );
-        color: #f5f7ff;
+        color: #f7e9ff;
+    }
+
+    .stApp::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 999;
+        opacity: 0.12;
+        background:
+            repeating-linear-gradient(
+                0deg,
+                rgba(255,255,255,0.12) 0px,
+                rgba(255,255,255,0.12) 1px,
+                transparent 1px,
+                transparent 4px
+            );
     }
 
     [data-testid="stSidebar"] {
-        background: linear-gradient(
-            180deg,
-            #111936 0%,
-            #0b1020 100%
-        );
-        border-right: 1px solid #26345f;
+        background:
+            linear-gradient(
+                180deg,
+                #160d2e 0%,
+                #08091b 100%
+            );
+        border-right: 2px solid #ff2bd6;
+    }
+
+    h1, h2, h3, label {
+        font-family: 'Orbitron', sans-serif !important;
     }
 
     h1 {
-        font-size: 3rem !important;
-        font-weight: 800 !important;
-        color: #ffffff;
-        letter-spacing: -1px;
+        color: #ffffff !important;
+        text-shadow:
+            0 0 5px #ff2bd6,
+            0 0 14px #ff2bd6,
+            0 0 28px #742cff;
+        letter-spacing: 2px;
     }
 
     h2, h3 {
-        color: #dce7ff;
+        color: #5ffcff !important;
+        text-shadow: 0 0 8px #00d9ff;
     }
 
-    p, label {
-        color: #b9c6e4 !important;
+    p {
+        color: #e7c8ff !important;
+    }
+
+    .retro-header {
+        padding: 30px;
+        margin-bottom: 25px;
+        border: 2px solid #ff2bd6;
+        border-radius: 20px;
+        background:
+            linear-gradient(
+                135deg,
+                rgba(49, 14, 81, 0.98),
+                rgba(11, 24, 67, 0.98)
+            );
+        box-shadow:
+            0 0 10px #ff2bd6,
+            0 0 30px rgba(255,43,214,0.45),
+            inset 0 0 25px rgba(95,252,255,0.12);
+    }
+
+    .retro-header h1 {
+        margin: 0 0 8px 0;
+        font-size: 2.6rem;
+    }
+
+    .retro-header p {
+        margin: 0;
+        font-size: 1rem;
+        letter-spacing: 1px;
     }
 
     div[data-testid="stMetric"] {
-        background: linear-gradient(
-            135deg,
-            rgba(35, 52, 100, 0.95),
-            rgba(20, 29, 62, 0.95)
-        );
-        border: 1px solid #3b55a0;
-        border-radius: 18px;
-        padding: 20px;
-        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.25);
+        background:
+            linear-gradient(
+                135deg,
+                rgba(22, 17, 62, 0.95),
+                rgba(34, 9, 55, 0.95)
+            );
+        border: 1px solid #5ffcff;
+        border-radius: 15px;
+        padding: 18px;
+        box-shadow:
+            0 0 9px rgba(95,252,255,0.7),
+            inset 0 0 15px rgba(255,43,214,0.12);
     }
 
     div[data-testid="stMetricLabel"] {
-        color: #9eb4e8 !important;
+        color: #d8b7ff !important;
     }
 
     div[data-testid="stMetricValue"] {
-        color: #65d9ff !important;
-        font-weight: 800;
-    }
-
-    .stButton > button {
-        background: linear-gradient(
-            90deg,
-            #5b5ff0,
-            #9b51e0
-        );
-        color: white;
-        border: none;
-        border-radius: 12px;
-        font-weight: 700;
-        padding: 0.6rem 1rem;
-        transition: 0.25s;
-    }
-
-    .stButton > button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(115, 98, 255, 0.45);
+        color: #5ffcff !important;
+        text-shadow: 0 0 8px #00d9ff;
+        font-family: 'Orbitron', sans-serif;
     }
 
     .stTextInput input,
     .stNumberInput input {
-        background: #11182d !important;
+        background-color: #0e1027 !important;
         color: #ffffff !important;
-        border: 1px solid #3d518c !important;
+        border: 1px solid #a633ff !important;
         border-radius: 10px !important;
+        box-shadow: inset 0 0 8px rgba(166,51,255,0.3);
     }
 
     div[data-baseweb="select"] > div {
-        background-color: #11182d;
-        border: 1px solid #3d518c;
+        background-color: #0e1027;
+        border: 1px solid #a633ff;
         border-radius: 10px;
     }
 
+    .stButton > button {
+        background:
+            linear-gradient(
+                90deg,
+                #ff2bd6,
+                #742cff
+            );
+        color: white;
+        border: 1px solid #5ffcff;
+        border-radius: 10px;
+        font-family: 'Orbitron', sans-serif;
+        font-weight: 700;
+        box-shadow: 0 0 12px rgba(255,43,214,0.7);
+    }
+
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow:
+            0 0 10px #5ffcff,
+            0 0 22px #ff2bd6;
+    }
+
     div[data-testid="stExpander"] {
-        background: rgba(20, 30, 65, 0.75);
-        border: 1px solid #344b88;
-        border-radius: 16px;
+        background: rgba(14, 16, 39, 0.85);
+        border: 1px solid #ff2bd6;
+        border-radius: 15px;
+        box-shadow: 0 0 12px rgba(255,43,214,0.35);
     }
 
     hr {
-        border-color: #293a70;
+        border-color: #a633ff;
     }
 
     </style>
@@ -124,9 +192,9 @@ st.markdown(
 )
 
 
-# =========================
+# =====================================================
 # FUNCIONES
-# =========================
+# =====================================================
 
 def leer_coeficientes(texto):
     texto = (
@@ -140,14 +208,17 @@ def leer_coeficientes(texto):
         [float(x) for x in texto.split()]
     )
 
-    if valores.size == 0 or not np.all(np.isfinite(valores)):
+    if valores.size == 0:
         raise ValueError(
             "Ingresa coeficientes numéricos válidos."
         )
 
-    valores = np.trim_zeros(valores, "f")
+    if not np.all(np.isfinite(valores)):
+        raise ValueError(
+            "Los coeficientes deben ser finitos."
+        )
 
-    return valores
+    return np.trim_zeros(valores, "f")
 
 
 def polinomio(coeficientes):
@@ -167,20 +238,17 @@ def polinomio(coeficientes):
 
         else:
             factor = "" if magnitud == 1 else f"{magnitud:g}"
-
             variable = (
                 "s"
                 if potencia == 1
                 else f"s^{{{potencia}}}"
             )
-
             termino = factor + variable
 
         if not partes:
             partes.append(
                 ("-" if valor < 0 else "") + termino
             )
-
         else:
             partes.append(
                 (" - " if valor < 0 else " + ") + termino
@@ -189,93 +257,60 @@ def polinomio(coeficientes):
     return "".join(partes) or "0"
 
 
-def grafica(titulo, tiempo, series, escalonada=False):
-    figura = go.Figure()
-
-    for nombre, datos, color in series:
-        figura.add_trace(
-            go.Scatter(
-                x=tiempo,
-                y=datos,
-                name=nombre,
-                mode="lines",
-                line=dict(
-                    color=color,
-                    width=3,
-                    shape="hv" if escalonada else "linear"
-                )
-            )
-        )
-
+def estilo_grafica(figura, titulo):
     figura.update_layout(
         title=dict(
             text=titulo,
             font=dict(
-                size=22,
-                color="#dce7ff"
+                family="Orbitron",
+                size=20,
+                color="#5ffcff"
             )
         ),
-        xaxis_title="Tiempo (s)",
-        yaxis_title="Amplitud",
-        height=450,
-        margin=dict(
-            l=30,
-            r=20,
-            t=70,
-            b=40
-        ),
+        height=470,
         paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(9,15,32,0.75)",
-        font=dict(color="#dce7ff"),
+        plot_bgcolor="rgba(7,8,25,0.90)",
+        font=dict(
+            color="#f1d9ff",
+            family="Arial"
+        ),
+        hovermode="x unified",
         legend=dict(
             orientation="h",
             y=1.12
         ),
-        hovermode="x unified",
-        xaxis=dict(
-            gridcolor="#28365e",
-            zerolinecolor="#526ca8"
-        ),
-        yaxis=dict(
-            gridcolor="#28365e",
-            zerolinecolor="#526ca8"
+        margin=dict(
+            l=45,
+            r=35,
+            t=80,
+            b=50
         )
     )
 
-    st.plotly_chart(
-        figura,
-        use_container_width=True
+    figura.update_xaxes(
+        title_text="Tiempo (s)",
+        gridcolor="#34245c",
+        zerolinecolor="#ff2bd6"
     )
 
+    figura.update_yaxes(
+        gridcolor="#34245c",
+        zerolinecolor="#5ffcff"
+    )
 
-# =========================
+    return figura
+
+
+# =====================================================
 # ENCABEZADO
-# =========================
+# =====================================================
 
 st.markdown(
     """
-    <div style="
-        padding: 28px;
-        border-radius: 22px;
-        margin-bottom: 25px;
-        background: linear-gradient(
-            135deg,
-            rgba(40, 57, 120, 0.95),
-            rgba(92, 48, 145, 0.90)
-        );
-        box-shadow: 0 12px 35px rgba(0,0,0,0.3);
-    ">
-        <h1 style="margin-bottom: 8px;">
-            ⚙️ Calculadora PID
-        </h1>
-
-        <p style="
-            font-size: 1.1rem;
-            color: #dbe5ff !important;
-            margin-bottom: 0;
-        ">
-            Simula plantas, ajusta Kp, Ki y Kd,
-            y analiza la respuesta del sistema.
+    <div class="retro-header">
+        <h1>📺 PID TV CONTROL</h1>
+        <p>
+            LABORATORIO RETROFUTURISTA DE CONTROL AUTOMÁTICO
         </p>
     </div>
     """,
@@ -283,13 +318,13 @@ st.markdown(
 )
 
 
-# =========================
-# PANEL LATERAL
-# =========================
+# =====================================================
+# SIDEBAR
+# =====================================================
 
 with st.sidebar:
 
-    st.header("🧩 Planta G(s)")
+    st.header("🧩 PLANTA G(s)")
 
     num_texto = st.text_input(
         "Numerador",
@@ -302,13 +337,12 @@ with st.sidebar:
     )
 
     st.caption(
-        "Escribe los coeficientes en potencias descendentes "
-        "de s. Usa punto para decimales."
+        "Coeficientes en potencias descendentes de s."
     )
 
     st.divider()
 
-    st.header("⏱️ Simulación")
+    st.header("⏱️ SIMULACIÓN")
 
     referencia = st.number_input(
         "Referencia",
@@ -317,7 +351,7 @@ with st.sidebar:
     )
 
     duracion = st.number_input(
-        "Duración de simulación (s)",
+        "Tiempo de simulación (s)",
         min_value=1.0,
         max_value=300.0,
         value=20.0,
@@ -343,14 +377,14 @@ with st.sidebar:
     )
 
 
-# =========================
-# TIPO DE CONTROLADOR
-# =========================
+# =====================================================
+# CONTROLADOR
+# =====================================================
 
-st.subheader("🎛️ Tipo de controlador")
+st.subheader("🎛️ CONFIGURACIÓN DEL CONTROLADOR")
 
 tipo_pid = st.radio(
-    "Selecciona el tipo de PID",
+    "Tipo de controlador",
     [
         "PID clásico (1 grado de libertad)",
         "PID de dos grados de libertad"
@@ -358,13 +392,12 @@ tipo_pid = st.radio(
     horizontal=True
 )
 
-
-col_beta, col_estado = st.columns(2)
+col_beta, col_info = st.columns(2)
 
 with col_beta:
 
     beta = st.number_input(
-        "Ponderación de la referencia β",
+        "Ponderación de referencia β",
         min_value=0.0,
         max_value=1.0,
         value=1.0,
@@ -372,34 +405,23 @@ with col_beta:
         format="%.2f",
         help=(
             "β=1 equivale al PID clásico. "
-            "Valores menores reducen la acción proporcional "
-            "ante cambios de referencia."
+            "Valores menores reducen la respuesta "
+            "proporcional ante cambios de referencia."
         )
     )
 
 
-with col_estado:
+with col_info:
 
     if tipo_pid == "PID clásico (1 grado de libertad)":
-
         beta = 1.0
-
-        st.success(
-            "PID clásico activo. β = 1"
-        )
+        st.success("PID CLÁSICO ACTIVO | β = 1")
 
     else:
-
-        st.info(
-            "PID de dos grados de libertad activo."
-        )
+        st.info("PID 2DOF ACTIVO | β CONFIGURABLE")
 
 
-# =========================
-# GANANCIAS
-# =========================
-
-st.subheader("📈 Ganancias del controlador")
+st.subheader("📈 GANANCIAS")
 
 modo = st.radio(
     "Forma de ajuste",
@@ -449,18 +471,9 @@ for columna, nombre, inicial in zip(
 kp, ki, kd = ganancias
 
 
-st.caption(
-    "Realimentación negativa unitaria. "
-    "El PID 2DOF usa β para ponderar la referencia "
-    "en la acción proporcional. "
-    "La derivada se aplica sobre la salida para evitar "
-    "un pico derivativo ante un cambio de referencia."
-)
-
-
-# =========================
+# =====================================================
 # SIMULACIÓN
-# =========================
+# =====================================================
 
 try:
 
@@ -479,9 +492,7 @@ try:
 
     if num.size >= den.size:
         raise ValueError(
-            "La planta debe ser estrictamente propia: "
-            "el grado del numerador debe ser menor que "
-            "el grado del denominador."
+            "La planta debe ser estrictamente propia."
         )
 
     st.latex(
@@ -498,14 +509,13 @@ try:
 
     if cantidad > 50000:
         raise ValueError(
-            "Reduce la duración o aumenta Ts. "
-            "Máximo 50 000 muestras."
+            "Reduce la duración o aumenta Ts."
         )
 
-    # Conversión de la planta a espacio de estados
+    # Planta en espacio de estados
     a, b, c, d = tf2ss(num, den)
 
-    # Discretización mediante ZOH
+    # Discretización ZOH
     ad, bd, cd, dd, _ = cont2discrete(
         (a, b, c, d),
         ts,
@@ -513,6 +523,7 @@ try:
     )
 
     tiempo = np.arange(cantidad) * ts
+
     referencia_array = np.full(
         cantidad,
         referencia
@@ -520,6 +531,7 @@ try:
 
     salida_array = np.zeros(cantidad)
     control_array = np.zeros(cantidad)
+    error_array = np.zeros(cantidad)
 
     proporcional_array = np.zeros(cantidad)
     integral_array = np.zeros(cantidad)
@@ -538,17 +550,14 @@ try:
 
     for k in range(cantidad):
 
-        # Salida actual de la planta
         salida = float(
             (cd @ estado_planta).item()
         )
 
-        # Error completo para la acción integral
         error_integral = (
             referencia_array[k] - salida
         )
 
-        # Error proporcional
         if tipo_pid == "PID de dos grados de libertad":
 
             error_proporcional = (
@@ -559,14 +568,12 @@ try:
 
             error_proporcional = error_integral
 
-        # Derivada filtrada sobre la salida
         derivada_filtrada = (
             alpha * derivada_filtrada
             + (salida - salida_anterior)
             / (tf + ts)
         )
 
-        # Componentes del PID
         componente_p = (
             kp * error_proporcional
         )
@@ -585,7 +592,6 @@ try:
             + componente_d
         )
 
-        # Protección numérica
         if (
             not np.all(
                 np.isfinite(
@@ -604,6 +610,7 @@ try:
             referencia_array = referencia_array[:k]
             salida_array = salida_array[:k]
             control_array = control_array[:k]
+            error_array = error_array[:k]
 
             proporcional_array = proporcional_array[:k]
             integral_array = integral_array[:k]
@@ -613,18 +620,17 @@ try:
 
         salida_array[k] = salida
         control_array[k] = control
+        error_array[k] = error_integral
 
         proporcional_array[k] = componente_p
         integral_array[k] = componente_i
         derivativa_array[k] = componente_d
 
-        # Actualización de la planta
         estado_planta = (
             ad @ estado_planta
             + bd[:, 0] * control
         )
 
-        # La integral utiliza el error completo
         acumulado_integral += (
             error_integral * ts
         )
@@ -639,99 +645,288 @@ try:
         )
 
     if len(tiempo) == 0:
-
         raise ValueError(
             "No se pudo calcular una respuesta válida."
         )
 
-    # =========================
-    # GRÁFICAS
-    # =========================
+    # =================================================
+    # GRÁFICA 1: PROCESO Y CONTROL
+    # =================================================
 
-    grafica(
-        "Respuesta de la planta",
-        tiempo,
-        [
-            (
-                "Referencia r(t)",
-                referencia_array,
-                "#ffb000"
+    grafica_proceso = make_subplots(
+        specs=[[{"secondary_y": True}]]
+    )
+
+    grafica_proceso.add_trace(
+        go.Scatter(
+            x=tiempo,
+            y=referencia_array,
+            name="Referencia r(t)",
+            mode="lines",
+            line=dict(
+                color="#ffb000",
+                width=3
             ),
-            (
-                "Salida y(t)",
-                salida_array,
-                "#48c9ff"
+            hovertemplate=(
+                "<b>Referencia r(t)</b><br>"
+                "Tiempo: %{x:.3f} s<br>"
+                "Posición: %{y:.4f}<br>"
+                "Ecuación: r(t) = referencia"
+                "<extra></extra>"
             )
-        ]
+        ),
+        secondary_y=False
     )
 
-    grafica(
-        "Acción de control",
-        tiempo,
-        [
-            (
-                "Control u(t)",
-                control_array,
-                "#28d7a2"
+    grafica_proceso.add_trace(
+        go.Scatter(
+            x=tiempo,
+            y=salida_array,
+            name="Salida y(t)",
+            mode="lines",
+            line=dict(
+                color="#5ffcff",
+                width=3
+            ),
+            hovertemplate=(
+                "<b>Salida y(t)</b><br>"
+                "Tiempo: %{x:.3f} s<br>"
+                "Posición: %{y:.4f}<br>"
+                "Ecuación: y(t) = G(s) · u(t)"
+                "<extra></extra>"
             )
-        ],
-        escalonada=True
+        ),
+        secondary_y=False
     )
+
+    grafica_proceso.add_trace(
+        go.Scatter(
+            x=tiempo,
+            y=control_array,
+            name="Control u(t)",
+            mode="lines",
+            line=dict(
+                color="#ff2bd6",
+                width=3
+            ),
+            hovertemplate=(
+                "<b>Control u(t)</b><br>"
+                "Tiempo: %{x:.3f} s<br>"
+                "Posición: %{y:.4f}<br>"
+                "Ecuación: u(t) = P(t) + I(t) + D(t)"
+                "<extra></extra>"
+            )
+        ),
+        secondary_y=True
+    )
+
+    grafica_proceso = estilo_grafica(
+        grafica_proceso,
+        "SEÑALES DE PROCESO Y CONTROL"
+    )
+
+    grafica_proceso.update_yaxes(
+        title_text="Referencia y salida",
+        secondary_y=False
+    )
+
+    grafica_proceso.update_yaxes(
+        title_text="Señal de control u(t)",
+        secondary_y=True
+    )
+
+    st.plotly_chart(
+        grafica_proceso,
+        use_container_width=True
+    )
+
+    # =================================================
+    # GRÁFICA 2: ERROR, INTEGRAL Y DERIVATIVA
+    # =================================================
+
+    grafica_acciones = go.Figure()
+
+    grafica_acciones.add_trace(
+        go.Scatter(
+            x=tiempo,
+            y=error_array,
+            name="Error e(t)",
+            mode="lines",
+            line=dict(
+                color="#ff625f",
+                width=3
+            ),
+            hovertemplate=(
+                "<b>Error e(t)</b><br>"
+                "Tiempo: %{x:.3f} s<br>"
+                "Posición: %{y:.4f}<br>"
+                "Ecuación: e(t) = r(t) − y(t)"
+                "<extra></extra>"
+            )
+        )
+    )
+
+    grafica_acciones.add_trace(
+        go.Scatter(
+            x=tiempo,
+            y=integral_array,
+            name="Acción integral I(t)",
+            mode="lines",
+            line=dict(
+                color="#28d7a2",
+                width=3
+            ),
+            hovertemplate=(
+                "<b>Acción integral I(t)</b><br>"
+                "Tiempo: %{x:.3f} s<br>"
+                "Posición: %{y:.4f}<br>"
+                "Ecuación: I(t) = Ki · ∫e(t)dt"
+                "<extra></extra>"
+            )
+        )
+    )
+
+    grafica_acciones.add_trace(
+        go.Scatter(
+            x=tiempo,
+            y=derivativa_array,
+            name="Acción derivativa D(t)",
+            mode="lines",
+            line=dict(
+                color="#e879c9",
+                width=3
+            ),
+            hovertemplate=(
+                "<b>Acción derivativa D(t)</b><br>"
+                "Tiempo: %{x:.3f} s<br>"
+                "Posición: %{y:.4f}<br>"
+                "Ecuación: D(t) = −Kd · dy/dt"
+                "<extra></extra>"
+            )
+        )
+    )
+
+    grafica_acciones = estilo_grafica(
+        grafica_acciones,
+        "ERROR Y ACCIONES DEL CONTROLADOR"
+    )
+
+    grafica_acciones.update_layout(
+        xaxis_title="Tiempo (s)",
+        yaxis_title="Amplitud"
+    )
+
+    st.plotly_chart(
+        grafica_acciones,
+        use_container_width=True
+    )
+
+    # =================================================
+    # COMPONENTES DEL CONTROLADOR
+    # =================================================
 
     with st.expander(
-        "🔍 Ver componentes proporcional, integral y derivativa"
+        "📺 VER COMPONENTES DEL CONTROLADOR"
     ):
 
-        grafica(
-            "Componentes del controlador",
-            tiempo,
-            [
-                (
-                    "Proporcional",
-                    proporcional_array,
-                    "#48c9ff"
+        componentes = go.Figure()
+
+        componentes.add_trace(
+            go.Scatter(
+                x=tiempo,
+                y=proporcional_array,
+                name="Proporcional P(t)",
+                mode="lines",
+                line=dict(
+                    color="#5ffcff",
+                    width=3
                 ),
-                (
-                    "Integral",
-                    integral_array,
-                    "#28d7a2"
-                ),
-                (
-                    "Derivativa",
-                    derivativa_array,
-                    "#e879c9"
+                hovertemplate=(
+                    "<b>Proporcional P(t)</b><br>"
+                    "Tiempo: %{x:.3f} s<br>"
+                    "Posición: %{y:.4f}<br>"
+                    "Ecuación: P(t) = Kp · eP(t)"
+                    "<extra></extra>"
                 )
-            ],
-            escalonada=True
+            )
         )
 
-    # =========================
-    # INDICADORES
-    # =========================
+        componentes.add_trace(
+            go.Scatter(
+                x=tiempo,
+                y=integral_array,
+                name="Integral I(t)",
+                mode="lines",
+                line=dict(
+                    color="#28d7a2",
+                    width=3
+                ),
+                hovertemplate=(
+                    "<b>Integral I(t)</b><br>"
+                    "Tiempo: %{x:.3f} s<br>"
+                    "Posición: %{y:.4f}<br>"
+                    "Ecuación: I(t) = Ki · ∫e(t)dt"
+                    "<extra></extra>"
+                )
+            )
+        )
 
-    st.subheader("📊 Indicadores de desempeño")
+        componentes.add_trace(
+            go.Scatter(
+                x=tiempo,
+                y=derivativa_array,
+                name="Derivativa D(t)",
+                mode="lines",
+                line=dict(
+                    color="#e879c9",
+                    width=3
+                ),
+                hovertemplate=(
+                    "<b>Derivativa D(t)</b><br>"
+                    "Tiempo: %{x:.3f} s<br>"
+                    "Posición: %{y:.4f}<br>"
+                    "Ecuación: D(t) = −Kd · dy/dt"
+                    "<extra></extra>"
+                )
+            )
+        )
+
+        componentes = estilo_grafica(
+            componentes,
+            "COMPONENTES DEL CONTROLADOR"
+        )
+
+        st.plotly_chart(
+            componentes,
+            use_container_width=True
+        )
+
+    # =================================================
+    # INDICADORES
+    # =================================================
+
+    st.subheader("📊 INDICADORES DEL SISTEMA")
 
     metricas = st.columns(3)
 
     metricas[0].metric(
-        "Última salida calculada",
+        "Última salida",
         f"{salida_array[-1]:.4f}"
     )
 
     metricas[1].metric(
-        "Último error calculado",
-        f"{referencia_array[-1] - salida_array[-1]:.4f}"
+        "Último error",
+        f"{error_array[-1]:.4f}"
     )
 
     metricas[2].metric(
-        "Máximo |u| calculado",
+        "Máximo |u(t)|",
         f"{np.max(np.abs(control_array)):.4f}"
     )
 
     st.caption(
-        "Cada cambio en la planta, referencia, ganancias "
-        "o tipo de controlador recalcula la simulación "
-        "desde cero."
+        "Mueve el cursor sobre cualquier gráfica para observar "
+        "el tiempo, la posición y la ecuación de cada señal."
     )
 
 
