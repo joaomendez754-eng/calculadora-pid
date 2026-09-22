@@ -3,7 +3,6 @@ import csv
 import numpy as np
 import streamlit as st
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 from scipy.signal import tf2ss, cont2discrete
 
 
@@ -235,7 +234,8 @@ def simular(
     kp,
     ki,
     kd,
-    beta
+    beta,
+    gamma=0.0
 ):
     cantidad = int(
         np.floor(duracion / ts)
@@ -271,7 +271,7 @@ def simular(
     estado = np.zeros(ad.shape[0])
     integral_acumulada = 0.0
     derivada_filtrada = 0.0
-    salida_anterior = 0.0
+    entrada_derivativa_anterior = 0.0
 
     alpha = tf / (tf + ts)
     interrumpida = False
@@ -287,21 +287,22 @@ def simular(
             beta * referencia_array[k] - salida
         )
 
+        entrada_derivativa = gamma * referencia_array[k] - salida
         derivada_filtrada = (
             alpha * derivada_filtrada
-            + (salida - salida_anterior)
+            + (entrada_derivativa - entrada_derivativa_anterior)
             / (tf + ts)
         )
 
         p = kp * error_proporcional
         i = ki * integral_acumulada
-        deriv = -kd * derivada_filtrada
+        deriv = kd * derivada_filtrada
 
         control = p + i + deriv
 
         if (
             not np.all(
-                np.isfinite([salida, control])
+                np.isfinite([salida, control, p, i, deriv])
             )
             or max(abs(salida), abs(control)) > 1e8
         ):
@@ -320,7 +321,7 @@ def simular(
         estado = ad @ estado + bd[:, 0] * control
 
         integral_acumulada += error * ts
-        salida_anterior = salida
+        entrada_derivativa_anterior = entrada_derivativa
 
     if interrumpida:
 
@@ -343,19 +344,10 @@ def simular(
         referencia_array[-1] - salida_array[-1]
     )
 
-    if referencia != 0:
-
-        sobreimpulso = max(
-            0,
-            (
-                np.max(salida_array) - referencia
-            )
-            / abs(referencia)
-            * 100
-        )
-
-    else:
-        sobreimpulso = 0.0
+    sobreimpulso = (
+        max(0.0, (np.max(salida_array / referencia) - 1.0) * 100.0)
+        if referencia != 0 else None
+    )
 
     banda = max(
         0.02 * abs(referencia),
@@ -379,13 +371,10 @@ def simular(
         )
 
     else:
-        tiempo_establecimiento = duracion
+        tiempo_establecimiento = None
 
-    estable = (
-        np.all(np.isfinite(salida_array))
-        and np.max(np.abs(salida_array)) < 1e6
-        and not interrumpida
-    )
+    if interrumpida:
+        tiempo_establecimiento = None
 
     return {
         "t": tiempo,
@@ -399,7 +388,7 @@ def simular(
         "error_final": error_final,
         "sobreimpulso": sobreimpulso,
         "ts_establecimiento": tiempo_establecimiento,
-        "estable": estable
+        "interrumpida": interrumpida
     }
 
 
@@ -527,39 +516,30 @@ with st.sidebar:
 
 st.subheader("🎛️ CONFIGURACIÓN DEL CONTROLADOR")
 
-tipo_pid = st.radio(
+tipo_pid = st.selectbox(
     "Tipo de controlador",
-    [
-        "PID clásico (1 grado de libertad)",
-        "PID de dos grados de libertad"
-    ],
-    horizontal=True
+    ["PID clásico (1DOF)", "PID con derivada sobre la salida (PI-D)",
+     "PID 2DOF — ponderación de referencia"],
+    index=1
 )
+ponderado = tipo_pid.startswith("PID 2DOF")
+if ponderado:
+    col1, col2 = st.columns(2)
+    with col1:
+        beta = st.number_input("β — ponderación proporcional", 0.0, 1.0, 1.0, 0.01)
+    with col2:
+        gamma = st.number_input("γ — ponderación derivativa", 0.0, 1.0, 0.0, 0.01)
+    st.caption("β pondera la referencia en P; γ la pondera en D. La integral utiliza r − y.")
+else:
+    beta = 1.0
+    gamma = 1.0 if tipo_pid.startswith("PID clásico") else 0.0
+    st.caption(f"Ponderaciones de este modo: β = {beta:g}, γ = {gamma:g}.")
 
-col1, col2 = st.columns(2)
-
-with col1:
-
-    beta = st.number_input(
-        "Ponderación de referencia β",
-        min_value=0.0,
-        max_value=1.0,
-        value=1.0,
-        step=0.05,
-        format="%.2f"
-    )
-
-with col2:
-
-    if tipo_pid == "PID clásico (1 grado de libertad)":
-
-        beta = 1.0
-        st.success("PID clásico activo | β = 1")
-
-    else:
-
-        st.info("PID 2DOF activo | β configurable")
-
+st.latex(r"U(s)=K_p[\beta R(s)-Y(s)]+\frac{K_i}{s}[R(s)-Y(s)]"
+         r"+\frac{K_d s}{1+T_f s}[\gamma R(s)-Y(s)]")
+st.caption("Referencia escalón desde cero, realimentación unitaria y condiciones iniciales cero. "
+           "Planta con retención ZOH; integral rectangular y derivada filtrada por Euler hacia atrás. "
+           "Sin saturación del actuador. Cada ajuste recalcula la simulación.")
 
 st.subheader("📈 GANANCIAS")
 
@@ -671,6 +651,9 @@ try:
             "El denominador debe tener grado de al menos 1."
         )
 
+    if num.size == 0:
+        raise ValueError("El numerador no puede ser completamente cero.")
+
     if num.size >= den.size:
 
         raise ValueError(
@@ -695,20 +678,8 @@ try:
         kp,
         ki,
         kd,
-        beta
-    )
-
-    clasico = simular(
-        num,
-        den,
-        referencia,
-        duracion,
-        ts,
-        tf,
-        kp,
-        ki,
-        kd,
-        1.0
+        beta,
+        gamma
     )
 
     tiempo = resultado["t"]
@@ -721,291 +692,63 @@ try:
     d = resultado["d"]
 
 
-    # =================================================
-    # ESTADO
-    # =================================================
-
-    if resultado["estable"]:
-        st.success("● SISTEMA ESTABLE")
+    if resultado["interrumpida"]:
+        st.warning("Simulación interrumpida por valores excesivos o no finitos. "
+                   "Se muestra solo el tramo calculado. Revisa ganancias, planta y Ts.")
     else:
-        st.error("● SISTEMA INESTABLE O INTERRUMPIDO")
+        st.success("Simulación completada")
+    st.caption("Completar el intervalo simulado no demuestra estabilidad del sistema.")
 
-
-    # =================================================
-    # GRÁFICA DE PROCESO Y CONTROL
-    # =================================================
-
-    figura_proceso = make_subplots(
-        specs=[[{"secondary_y": True}]]
-    )
-
-    figura_proceso.add_trace(
-        go.Scatter(
-            x=tiempo,
-            y=r,
-            name="Referencia r(t)",
-            line=dict(
-                color="#ffb000",
-                width=3
-            ),
-            hovertemplate=(
-                "<b>Referencia r(t)</b><br>"
-                "Tiempo: %{x:.3f} s<br>"
-                "Posición: %{y:.4f}<br>"
-                "Ecuación: r(t) = referencia"
-                "<extra></extra>"
-            )
-        ),
-        secondary_y=False
-    )
-
-    figura_proceso.add_trace(
-        go.Scatter(
-            x=tiempo,
-            y=y,
-            name="Salida y(t)",
-            line=dict(
-                color="#5ffcff",
-                width=3
-            ),
-            hovertemplate=(
-                "<b>Salida y(t)</b><br>"
-                "Tiempo: %{x:.3f} s<br>"
-                "Posición: %{y:.4f}<br>"
-                "Ecuación: y(t) = G(s) · u(t)"
-                "<extra></extra>"
-            )
-        ),
-        secondary_y=False
-    )
-
-    figura_proceso.add_trace(
-        go.Scatter(
-            x=tiempo,
-            y=u,
-            name="Control u(t)",
-            line=dict(
-                color="#ff2bd6",
-                width=3
-            ),
-            hovertemplate=(
-                "<b>Control u(t)</b><br>"
-                "Tiempo: %{x:.3f} s<br>"
-                "Posición: %{y:.4f}<br>"
-                "Ecuación: u(t) = P(t) + I(t) + D(t)"
-                "<extra></extra>"
-            )
-        ),
-        secondary_y=True
-    )
-
-    figura_proceso = estilo(
-        figura_proceso,
-        "SEÑALES DE PROCESO Y CONTROL"
-    )
-
-    figura_proceso.update_yaxes(
-        title_text="Referencia y salida",
-        secondary_y=False
-    )
-
-    figura_proceso.update_yaxes(
-        title_text="Señal de control u(t)",
-        secondary_y=True
-    )
-
-    st.plotly_chart(
-        figura_proceso,
-        use_container_width=True
-    )
-
-
-    # =================================================
-    # COMPARACIÓN
-    # =================================================
-
-    st.subheader("🔁 COMPARACIÓN PID CLÁSICO VS PID 2DOF")
-
-    comparacion = go.Figure()
-
-    comparacion.add_trace(
-        go.Scatter(
-            x=tiempo,
-            y=r,
-            name="Referencia",
-            line=dict(
-                color="#ffb000",
-                width=2,
-                dash="dash"
-            )
-        )
-    )
-
-    comparacion.add_trace(
-        go.Scatter(
-            x=tiempo,
-            y=clasico["y"],
-            name="PID clásico",
-            line=dict(
-                color="#ff625f",
-                width=3
-            )
-        )
-    )
-
-    comparacion.add_trace(
-        go.Scatter(
-            x=tiempo,
-            y=y,
-            name="PID 2DOF",
-            line=dict(
-                color="#28d7a2",
-                width=3
-            )
-        )
-    )
-
-    comparacion = estilo(
-        comparacion,
-        "COMPARACIÓN DE RESPUESTAS"
-    )
-
-    st.plotly_chart(
-        comparacion,
-        use_container_width=True
-    )
-
-
-    # =================================================
-    # ERROR, INTEGRAL Y DERIVATIVA
-    # =================================================
-
-    figura_acciones = go.Figure()
-
-    figura_acciones.add_trace(
-        go.Scatter(
-            x=tiempo,
-            y=e,
-            name="Error e(t)",
-            line=dict(
-                color="#ff625f",
-                width=3
-            ),
-            hovertemplate=(
-                "<b>Error e(t)</b><br>"
-                "Tiempo: %{x:.3f} s<br>"
-                "Posición: %{y:.4f}<br>"
-                "Ecuación: e(t) = r(t) − y(t)"
-                "<extra></extra>"
-            )
-        )
-    )
-
-    figura_acciones.add_trace(
-        go.Scatter(
-            x=tiempo,
-            y=i,
-            name="Acción integral I(t)",
-            line=dict(
-                color="#28d7a2",
-                width=3
-            ),
-            hovertemplate=(
-                "<b>Acción integral I(t)</b><br>"
-                "Tiempo: %{x:.3f} s<br>"
-                "Posición: %{y:.4f}<br>"
-                "Ecuación: I(t) = Ki · ∫e(t)dt"
-                "<extra></extra>"
-            )
-        )
-    )
-
-    figura_acciones.add_trace(
-        go.Scatter(
-            x=tiempo,
-            y=d,
-            name="Acción derivativa D(t)",
-            line=dict(
-                color="#e879c9",
-                width=3
-            ),
-            hovertemplate=(
-                "<b>Acción derivativa D(t)</b><br>"
-                "Tiempo: %{x:.3f} s<br>"
-                "Posición: %{y:.4f}<br>"
-                "Ecuación: D(t) = −Kd · dy/dt"
-                "<extra></extra>"
-            )
-        )
-    )
-
-    figura_acciones = estilo(
-        figura_acciones,
-        "ERROR Y ACCIONES DEL CONTROLADOR"
-    )
-
-    st.plotly_chart(
-        figura_acciones,
-        use_container_width=True
-    )
-
-
-    # =================================================
-    # COMPONENTES P, I Y D
-    # =================================================
-
-    with st.expander(
-        "📺 VER COMPONENTES P, I Y D"
-    ):
-
-        componentes = go.Figure()
-
-        componentes.add_trace(
-            go.Scatter(
-                x=tiempo,
-                y=p,
-                name="Proporcional P(t)",
-                line=dict(
-                    color="#5ffcff",
-                    width=3
+    # Cuatro paneles independientes. Las ecuaciones corresponden al cálculo discreto.
+    def mostrar_grafica(titulo, series, clave, escalonada=False):
+        figura = go.Figure()
+        for nombre, datos, color, ecuacion in series:
+            figura.add_trace(go.Scatter(
+                x=tiempo, y=datos, name=nombre, mode="lines",
+                line=dict(color=color, width=3,
+                          shape="hv" if escalonada else "linear"),
+                hovertemplate=(
+                    "<b>" + nombre + "</b><br>"
+                    "Tiempo: %{x:.3f} s<br>"
+                    "Valor: %{y:.6f}<br>"
+                    "Ecuación: " + ecuacion + "<extra></extra>"
                 )
-            )
-        )
+            ))
+        estilo(figura, titulo)
+        figura.update_layout(uirevision=clave)
+        figura.update_yaxes(title_text="Amplitud")
+        figura.update_xaxes(showspikes=True, spikemode="across", spikesnap="cursor")
+        st.plotly_chart(figura, use_container_width=True, key=clave,
+                        config={"scrollZoom": True, "displaylogo": False})
 
-        componentes.add_trace(
-            go.Scatter(
-                x=tiempo,
-                y=i,
-                name="Integral I(t)",
-                line=dict(
-                    color="#28d7a2",
-                    width=3
-                )
-            )
-        )
+    st.caption("Arrastra para ampliar; doble clic para restablecer los ejes. "
+               "Pulsa una leyenda para ocultar o mostrar una señal.")
+    mostrar_grafica("01 · ENTRADA DE REFERENCIA Y SALIDA", [
+        ("Referencia r(t)", r, "#ffb000", f"r[k] = {referencia:g}"),
+        ("Salida y(t)", y, "#5ffcff", "y[k] = C_d x[k]")
+    ], "entrada_salida")
+    st.caption("Aquí la entrada es la referencia del lazo. La entrada física de la planta "
+               "es u(t), representada en la siguiente gráfica.")
 
-        componentes.add_trace(
-            go.Scatter(
-                x=tiempo,
-                y=d,
-                name="Derivativa D(t)",
-                line=dict(
-                    color="#e879c9",
-                    width=3
-                )
-            )
-        )
+    mostrar_grafica("02 · SEÑAL DE CONTROL", [
+        ("Control u(t)", u, "#ff2bd6", "u[k] = P[k] + I[k] + D[k]")
+    ], "control", escalonada=True)
 
-        componentes = estilo(
-            componentes,
-            "COMPONENTES DEL CONTROLADOR"
-        )
+    mostrar_grafica("03 · ERROR DE CONTROL", [
+        ("Error e(t)", e, "#ff625f", "e[k] = r[k] − y[k]")
+    ], "error")
 
-        st.plotly_chart(
-            componentes,
-            use_container_width=True
-        )
-
+    mostrar_grafica("04 · COMPONENTES DEL CONTROLADOR", [
+        (f"Proporcional · Kp={kp:g}", p, "#5ffcff",
+         f"P[k] = {kp:g} · ({beta:g} r[k] − y[k])"),
+        (f"Integral · Ki={ki:g}", i, "#28d7a2",
+         f"I[k] = I[k−1] + {ki:g} · {ts:g} · e[k−1]"),
+        (f"Derivativa · Kd={kd:g}", d, "#e879c9",
+         "D[k] = α D[k−1] + Kd (q[k] − q[k−1]) / (Tf + Ts)"
+         f"<br>q[k] = {gamma:g} r[k] − y[k]; α = Tf / (Tf + Ts)")
+    ], "componentes", escalonada=True)
+    st.caption("Kp, Ki y Kd son ganancias. Las curvas muestran las acciones P, I y D "
+               "que generan esas ganancias a lo largo del tiempo.")
 
     # =================================================
     # INDICADORES
@@ -1021,18 +764,18 @@ try:
     )
 
     m2.metric(
-        "Error permanente",
+        "Último error calculado",
         f"{resultado['error_final']:.4f}"
     )
 
     m3.metric(
         "Sobreimpulso",
-        f"{resultado['sobreimpulso']:.2f}%"
+        f"{resultado['sobreimpulso']:.2f}%" if resultado["sobreimpulso"] is not None else "No aplica"
     )
 
     m4.metric(
         "Tiempo de establecimiento",
-        f"{resultado['ts_establecimiento']:.2f} s"
+        f"{resultado['ts_establecimiento']:.2f} s" if resultado["ts_establecimiento"] is not None else "No alcanzado"
     )
 
 
@@ -1040,8 +783,12 @@ try:
     # EXPORTACIÓN CSV PARA EXCEL
     # =================================================
 
+    st.caption("Indicadores del intervalo calculado. Establecimiento observado: banda "
+               "±máx(2 % de |referencia|, 0.01). No garantiza permanencia futura en la banda.")
+
     st.subheader("💾 EXPORTAR RESULTADOS")
 
+    decimal_csv = st.selectbox("Separador decimal del CSV", ["Coma (Excel en español)", "Punto"])
     archivo = io.StringIO()
 
     escritor = csv.writer(
@@ -1072,19 +819,13 @@ try:
         d
     ):
         escritor.writerow([
-            f"{fila[0]:.6f}",
-            f"{fila[1]:.6f}",
-            f"{fila[2]:.6f}",
-            f"{fila[3]:.6f}",
-            f"{fila[4]:.6f}",
-            f"{fila[5]:.6f}",
-            f"{fila[6]:.6f}",
-            f"{fila[7]:.6f}"
+            f"{valor:.6f}".replace(".", ",") if decimal_csv.startswith("Coma")
+            else f"{valor:.6f}" for valor in fila
         ])
 
     st.download_button(
         label="⬇️ DESCARGAR RESULTADOS PARA EXCEL",
-        data=archivo.getvalue(),
+        data=archivo.getvalue().encode("utf-8-sig"),
         file_name="resultados_pid.csv",
         mime="text/csv",
         use_container_width=True
@@ -1092,7 +833,8 @@ try:
 
     st.caption(
         "El archivo utiliza punto y coma como separador "
-        "para abrir correctamente en Excel."
+        "y seis decimales. Si Excel no separa las columnas, importa desde Datos → Desde texto/CSV "
+        "y selecciona punto y coma como delimitador."
     )
 
 
